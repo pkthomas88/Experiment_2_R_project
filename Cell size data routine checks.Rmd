@@ -217,6 +217,7 @@ ggplot(highdiv_biov, aes(biov))+
 
 ```
 
+# Calculation of biovolume per ml
 
 ```{r}
 ```
@@ -228,7 +229,6 @@ ggplot(highdiv_biov, aes(biov))+
 
 ```{r}
 ```
-
 
 ```{r}
 ```
