@@ -1,0 +1,236 @@
+---
+title: "Cell size data routine checks"
+output: html_document
+---
+
+# Data import and setup
+
+Libraries and data import and removing irrelevant data
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(tidyverse)
+library(readxl)
+
+sizechecks <- read_excel("C:/Users/pktho/OneDrive/Experiment 2 ALL SYSTEMATIC PHOTOS/Experiment 2 cell sizes 14.01.21_PTchanges.xlsx", 
+    sheet = "all cell measurements")
+
+sizechecks <- sizechecks[1:17]
+sizechecks <- sizechecks %>% filter(entrant!="PT") %>% 
+  mutate(distance=distance/1000) %>% select(-angle) #because it thinks commas are thousands and not decimal point but careful with this!!
+
+```
+
+Checking that the dimensions make sense for each species. On second thought though I think this would be best to check in excel to make sure I change errors to the right dimension (like would 'l' for dity really be h or w?)
+
+```{r}
+#yeah for example there are some that have dimension labels that will cause problems
+sizechecks %>% filter(species=='dity', dimension == 'l')
+
+#the only way I can think to di this now is to separate by species
+dity <- subset(sizechecks, species=="dity")
+rhizo <- subset(sizechecks, species=="rhizo")
+tnema <- subset(sizechecks, species=="thalasso")
+
+dity %>% filter(dimension == 'l')
+
+dity <- dity %>% 
+  mutate(dimension=ifelse(dimension=='l', 'h', dimension)) %>% 
+
+dity %>% filter(dimension == 'l')
+
+##^^example of how I might do this but holding off on this for now**
+
+
+
+```
+
+
+Filtering and checking numbers of observations by treatments and then by each plate/well combination
+
+**so far this is total obs not total number of cells so maybe move to after pivoting and mutating stuff**
+
+```{r}
+
+#checks where data is generally sparse or not
+
+grouped <- sizechecks %>% group_by(nuts, temp, species_richness, strains) %>% 
+  summarize(count=n())
+
+ggplot(grouped, aes(strains, count))+
+  geom_point()
+
+#checks which wells have been done already
+
+grouped2 <- sizechecks %>% group_by(plate, well, species_richness, strains, nuts, temp) %>% 
+  summarize(count=n())
+```
+
+Check where the problems are so pivot_wider doesn't drive me crazy
+
+```{r}
+#makes an object of all the cell_ids that appear too many times
+
+cell_id_checks <- sizechecks %>% 
+  count(cell_id) %>% 
+  filter(n>2)
+
+biovolumes_wide <- sizechecks %>%
+  pivot_wider(names_from = dimension,
+              values_from = distance,
+              values_fn = length,
+              id_cols = cell_id)
+
+#not sure why this gives a different number than the chunk above where it gives 56 with too many cell_ids, this gives 174??
+
+```
+
+Using pivot wider to check if there are errors with cell_id (more than one or 2 per cell id = problematic)
+
+```{r}
+
+
+biovolumes_wide_check_counts <- biovolumes_wide %>% filter(h>1 | w>1 | d>1 | h>1)
+```
+
+For now, excluding ones where the cell_ids are weird, but for the final analysis need to either manually fix those in excel, since that might be tough to do in R
+
+```{r}
+#join the object with all the weird cell_ids and filter those out since those are the only nas, which gets ride of a couple hundred rows
+biovolumes_wide_clean <- left_join(sizechecks, cell_id_checks) %>%
+  filter(is.na(n))
+
+biovolumes_wide_clean2 <- biovolumes_wide_clean %>%
+  pivot_wider(names_from = dimension,
+              values_from = distance, values_fn=length)
+
+biovolumes_wide_check_counts <- biovolumes_wide_clean2 %>% filter(h>1 | w>1 | d>1 | h>1)
+
+bad <- biovolumes_wide_check_counts[11] %>% 
+  mutate(badrows='bad')
+
+biovolumes_wide_clean3 <- left_join(sizechecks, bad) %>% 
+  filter(is.na(badrows))
+
+biovolumes_wide_clean4 <- biovolumes_wide_clean3 %>%
+  select(cell_id, dimension, distance) %>% 
+  pivot_wider(names_from = dimension,
+              values_from = distance)
+
+              
+              
+```
+
+Since pivot_wider is being really shitty, I'll just take the mean values for things that are weird, but this
+```{r}
+
+biovolumes_wide <- sizechecks %>%
+  pivot_wider(names_from = dimension,
+              values_from = distance,
+              values_fn = mean) #mean == wrong, so do it right later
+              #id_cols = cell_id)
+
+```
+
+
+
+```{r}
+dity <- subset(biovolumes_wide, species=="dity")
+rhizo <- subset(biovolumes_wide, species=="rhizo")
+tnema <- subset(biovolumes_wide, species=="thalasso")
+```
+
+For this part I will take the mean ratio of the long:short axis and apply that, so for now the only real data is the short axis and the long axis is an estimation based on the average ratio. Need to fix it so the ratio is only applied to broken cells and not all cells.
+
+```{r}
+dity_mean_ratio <- mean(dity$h/dity$w, na.rm = TRUE)
+dity <- dity %>% 
+  mutate(h=w*dity_mean_ratio, biov = w*w*h/2)
+
+rhizo_mean_ratio <- mean(rhizo$h/rhizo$d, na.rm=TRUE)
+rhizo <- rhizo %>% 
+  filter(is.na(l)) %>% 
+  mutate(h=d*rhizo_mean_ratio, biov = (pi/4)*d^2*h)
+
+tnema_mean_ratio <- mean(tnema$l/tnema$h, na.rm = TRUE)
+tnema <- tnema %>% 
+  mutate(l=h*tnema_mean_ratio, biov = l*h*h)
+
+
+fakedata <- bind_rows(dity, rhizo, tnema)
+
+mono_biov <- filter(fakedata, species_richness==1, strains==1)
+highdiv_biov <- filter(fakedata, species_richness==3, strains==3)
+
+```
+
+
+# Analysis of size by environment and diversity treatments
+
+
+```{r}
+
+#COOL fake data!
+
+library(ggridges)
+ggplot(mono_biov, aes(x = biov, y = div_tx ))+
+  geom_density_ridges()+
+  scale_x_log10()
+  
+ggplot(mono_biov, aes(x = biov, y = as.factor(temp)))+
+  geom_density_ridges()+
+  facet_wrap(~div_tx)+
+  scale_x_log10()
+
+ggplot(mono_biov, aes(x = biov, y = as.factor(nuts)))+
+  geom_density_ridges()+
+  facet_wrap(~div_tx)+
+  scale_x_log10()
+  
+
+```
+
+Next do 3
+
+```{r}
+
+library(ggridges)
+ggplot(highdiv_biov, aes(x = biov, y = div_tx ))+
+  geom_density_ridges()+
+  scale_x_log10()
+  
+ggplot(highdiv_biov, aes(x = biov, y = as.factor(temp)))+
+  geom_density_ridges()+
+  facet_wrap(~div_tx)+
+  scale_x_log10()
+
+ggplot(highdiv_biov, aes(x = biov, y = as.factor(nuts)))+
+  geom_density_ridges()+
+  facet_wrap(~div_tx)+
+  scale_x_log10()
+  
+ggplot(highdiv_biov, aes(biov))+
+  geom_density()+
+  facet_grid(temp~nuts)+
+  scale_x_log10()
+
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
