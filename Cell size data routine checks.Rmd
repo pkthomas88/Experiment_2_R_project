@@ -201,7 +201,7 @@ ggplot(highdiv_biov, aes(x = biov, y = div_tx ))+
   scale_x_log10()
   
 ggplot(highdiv_biov, aes(x = biov, y = as.factor(temp)))+
-  geom_density_ridges()+
+  geom_densityy_ridges()+
   facet_wrap(~div_tx)+
   scale_x_log10()
 
