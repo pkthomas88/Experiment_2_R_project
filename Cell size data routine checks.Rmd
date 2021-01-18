@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(readxl)
+library(ggridges)
 
 sizechecks <- read_excel("C:/Users/pktho/OneDrive/Experiment 2 ALL SYSTEMATIC PHOTOS/Experiment 2 cell sizes 14.01.21_PTchanges.xlsx", 
     sheet = "all cell measurements")
@@ -26,7 +27,7 @@ Checking that the dimensions make sense for each species. On second thought thou
 
 ```{r}
 #yeah for example there are some that have dimension labels that will cause problems
-sizechecks %>% filter(species=='dity', dimension == 'l')
+sizechecks %>% filter(species =='dity', dimension == 'l')
 
 #the only way I can think to di this now is to separate by species
 dity <- subset(sizechecks, species=="dity")
@@ -36,7 +37,7 @@ tnema <- subset(sizechecks, species=="thalasso")
 dity %>% filter(dimension == 'l')
 
 dity <- dity %>% 
-  mutate(dimension=ifelse(dimension=='l', 'h', dimension)) %>% 
+  mutate(dimension=ifelse(dimension=='l', 'h', dimension))
 
 dity %>% filter(dimension == 'l')
 
@@ -168,7 +169,7 @@ highdiv_biov <- filter(fakedata, species_richness==3, strains==3)
 
 # Analysis of size by environment and diversity treatments
 
-
+## monocultures
 ```{r}
 
 #COOL fake data!
@@ -191,25 +192,29 @@ ggplot(mono_biov, aes(x = biov, y = as.factor(nuts)))+
 
 ```
 
-Next do 3
+##3 species 3 strains
+
+Density plots of size by temperature for high diversity treatments
 
 ```{r}
-
-library(ggridges)
-ggplot(highdiv_biov, aes(x = biov, y = div_tx ))+
-  geom_density_ridges()+
-  scale_x_log10()
-  
 ggplot(highdiv_biov, aes(x = biov, y = as.factor(temp)))+
-  geom_densityy_ridges()+
+  geom_density_ridges()+
   facet_wrap(~div_tx)+
   scale_x_log10()
+```
 
+Density plots of size by nutrients for high diversity treatments
+
+```{r}
 ggplot(highdiv_biov, aes(x = biov, y = as.factor(nuts)))+
   geom_density_ridges()+
   facet_wrap(~div_tx)+
   scale_x_log10()
-  
+```
+
+Density plots with facet_grid by temperature and nutrients
+
+```{r}
 ggplot(highdiv_biov, aes(biov))+
   geom_density()+
   facet_grid(temp~nuts)+
