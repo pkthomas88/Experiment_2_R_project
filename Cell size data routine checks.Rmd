@@ -14,25 +14,34 @@ library(tidyverse)
 library(readxl)
 library(ggridges)
 
+theme_set(theme_bw()+
+  theme(axis.text=element_text(size=12),
+  axis.title.x = element_text(size = 16),
+  axis.title.y = element_text(size = 16)))
+
 sizechecks <- read_excel("C:/Users/pktho/OneDrive/Experiment 2 ALL SYSTEMATIC PHOTOS/Experiment 2 cell sizes 14.01.21_PTchanges.xlsx", 
     sheet = "all cell measurements")
 
 sizechecks <- sizechecks[1:17]
-sizechecks <- sizechecks %>% filter(entrant!="PT") %>% 
-  mutate(distance=distance/1000) %>% select(-angle) #because it thinks commas are thousands and not decimal point but careful with this!!
+sizechecks <- sizechecks %>% 
+  filter(entrant!="PT") %>% 
+  mutate(distance=distance/1000) %>% 
+  select(-angle) %>% 
+  mutate(species=ifelse(species=="thalasso", "tnema", species))
+  #because it thinks commas are thousands and not decimal point but careful with this!!
 
 ```
 
 Checking that the dimensions make sense for each species. On second thought though I think this would be best to check in excel to make sure I change errors to the right dimension (like would 'l' for dity really be h or w?)
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 #yeah for example there are some that have dimension labels that will cause problems
 sizechecks %>% filter(species =='dity', dimension == 'l')
 
 #the only way I can think to di this now is to separate by species
 dity <- subset(sizechecks, species=="dity")
 rhizo <- subset(sizechecks, species=="rhizo")
-tnema <- subset(sizechecks, species=="thalasso")
+tnema <- subset(sizechecks, species=="tnema")
 
 dity %>% filter(dimension == 'l')
 
@@ -60,7 +69,8 @@ grouped <- sizechecks %>% group_by(nuts, temp, species_richness, strains) %>%
   summarize(count=n())
 
 ggplot(grouped, aes(strains, count))+
-  geom_point()
+  geom_point()+
+  facet_grid(temp~species_richness)
 
 #checks which wells have been done already
 
@@ -95,7 +105,9 @@ Using pivot wider to check if there are errors with cell_id (more than one or 2 
 biovolumes_wide_check_counts <- biovolumes_wide %>% filter(h>1 | w>1 | d>1 | h>1)
 ```
 
-For now, excluding ones where the cell_ids are weird, but for the final analysis need to either manually fix those in excel, since that might be tough to do in R
+For now, attempting to exclude ones where the cell_ids are weird, but for the final analysis need to either manually fix those in excel, since that might be tough to do in R
+
+> And even after I exclude the weird ones it still gives issues with pivot_wider :/
 
 ```{r}
 #join the object with all the weird cell_ids and filter those out since those are the only nas, which gets ride of a couple hundred rows
@@ -123,7 +135,8 @@ biovolumes_wide_clean4 <- biovolumes_wide_clean3 %>%
               
 ```
 
-Since pivot_wider is being really shitty, I'll just take the mean values for things that are weird, but this
+Since pivot_wider is being really shitty, I'll just take the mean values for things that are weird, but this needs to be fixed
+
 ```{r}
 
 biovolumes_wide <- sizechecks %>%
@@ -134,35 +147,51 @@ biovolumes_wide <- sizechecks %>%
 
 ```
 
-
+Separating the broken vs non-broken cells, separating species
 
 ```{r}
-dity <- subset(biovolumes_wide, species=="dity")
-rhizo <- subset(biovolumes_wide, species=="rhizo")
-tnema <- subset(biovolumes_wide, species=="thalasso")
+notbroken <- filter(biovolumes_wide, is.na(broken))
+broken <- biovolumes_wide %>% filter(broken==1)
 ```
 
-For this part I will take the mean ratio of the long:short axis and apply that, so for now the only real data is the short axis and the long axis is an estimation based on the average ratio. Need to fix it so the ratio is only applied to broken cells and not all cells.
+Attempting to deal with the broken cells correctly
+
+1. make objects for each species
+2. calculate mean ratio of measured dimensions
+3. use mutate to calculate unmeasured dimensions
 
 ```{r}
-dity_mean_ratio <- mean(dity$h/dity$w, na.rm = TRUE)
-dity <- dity %>% 
-  mutate(h=w*dity_mean_ratio, biov = w*w*h/2)
+dity_intact <- subset(notbroken, species=="dity")
+rhizo_intact <- subset(notbroken, species=="rhizo")
+tnema_intact <- subset(notbroken, species=="tnema")
 
-rhizo_mean_ratio <- mean(rhizo$h/rhizo$d, na.rm=TRUE)
-rhizo <- rhizo %>% 
-  filter(is.na(l)) %>% 
-  mutate(h=d*rhizo_mean_ratio, biov = (pi/4)*d^2*h)
+dity_mean_ratio <- mean(dity_intact$h/dity_intact$w, na.rm = TRUE)
 
-tnema_mean_ratio <- mean(tnema$l/tnema$h, na.rm = TRUE)
-tnema <- tnema %>% 
-  mutate(l=h*tnema_mean_ratio, biov = l*h*h)
+rhizo_mean_ratio <- mean(rhizo_intact$h/rhizo_intact$d, na.rm=TRUE)
+
+tnema_mean_ratio <- mean(tnema_intact$l/tnema_intact$h, na.rm = TRUE)
+
+broken <- broken %>% 
+  mutate(h = ifelse(species=='dity', w*dity_mean_ratio, h)) %>% 
+  mutate(h = ifelse(species=='rhizo', d*rhizo_mean_ratio, h)) %>%
+  mutate(l = ifelse(species=='tnema', h*tnema_mean_ratio, l))
+  
+biovolumes_with_broken <- bind_rows(dity_intact, rhizo_intact, tnema_intact, broken)
+
+biovolumes_with_broken <- biovolumes_with_broken %>%
+  mutate(biov='NA') %>% 
+  mutate(biov = ifelse(species=='dity', w*w*h/2, biov)) %>% 
+  mutate(biov = ifelse(species=='rhizo', (pi/4)*d^2*h, biov)) %>%
+  mutate(biov = ifelse(species=='tnema', l*h*h, biov)) %>% 
+  mutate(biov=as.integer(biov))
+
+```
 
 
-fakedata <- bind_rows(dity, rhizo, tnema)
+```{r}
+mono_biov <- filter(biovolumes_with_broken, species_richness==1, strains==1)
 
-mono_biov <- filter(fakedata, species_richness==1, strains==1)
-highdiv_biov <- filter(fakedata, species_richness==3, strains==3)
+highdiv_biov <- filter(biovolumes_with_broken, species_richness==3, strains==3)
 
 ```
 
@@ -174,8 +203,7 @@ highdiv_biov <- filter(fakedata, species_richness==3, strains==3)
 
 #COOL fake data!
 
-library(ggridges)
-ggplot(mono_biov, aes(x = biov, y = div_tx ))+
+ggplot(mono_biov, aes(x = biov, y = div_tx))+
   geom_density_ridges()+
   scale_x_log10()
   
@@ -188,11 +216,20 @@ ggplot(mono_biov, aes(x = biov, y = as.factor(nuts)))+
   geom_density_ridges()+
   facet_wrap(~div_tx)+
   scale_x_log10()
-  
+
+ggplot(mono_biov, aes(x = as.factor(temp), y = biov, fill=nuts))+
+  facet_wrap(~div_tx, scales = 'free')+
+  geom_violin()+
+  scale_y_log10()
+
+ggplot(mono_biov, aes(x = as.factor(temp), y = biov, fill=nuts))+
+  facet_wrap(~div_tx, scales = 'free')+
+  geom_boxplot()+
+  scale_y_log10()
 
 ```
 
-##3 species 3 strains
+## 3 species 3 strains
 
 Density plots of size by temperature for high diversity treatments
 
@@ -201,26 +238,45 @@ ggplot(highdiv_biov, aes(x = biov, y = as.factor(temp)))+
   geom_density_ridges()+
   facet_wrap(~div_tx)+
   scale_x_log10()
-```
 
-Density plots of size by nutrients for high diversity treatments
-
-```{r}
 ggplot(highdiv_biov, aes(x = biov, y = as.factor(nuts)))+
   geom_density_ridges()+
   facet_wrap(~div_tx)+
   scale_x_log10()
-```
 
-Density plots with facet_grid by temperature and nutrients
-
-```{r}
 ggplot(highdiv_biov, aes(biov))+
   geom_density()+
   facet_grid(temp~nuts)+
   scale_x_log10()
 
+ggplot(highdiv_biov, aes(as.factor(temp), biov,  fill=nuts))+
+  geom_boxplot()+
+  scale_y_log10()
+
+ggplot(highdiv_biov, aes(as.factor(temp), biov,  fill=nuts))+
+  geom_violin()+
+  scale_y_log10()
+
 ```
+
+## All diversity treatments
+
+```{r}
+ggplot(biovolumes_with_broken, aes(x = biov, y = as.factor(temp)))+
+  geom_density_ridges()+
+  scale_x_log10()
+
+ggplot(biovolumes_with_broken, aes(x = biov, y = as.factor(nuts)))+
+  geom_density_ridges()+
+  scale_x_log10()
+
+ggplot(biovolumes_with_broken, aes(biov))+
+  geom_density()+
+  facet_grid(temp~nuts)+
+  scale_x_log10()
+```
+
+
 
 # Calculation of biovolume per ml
 
