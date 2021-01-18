@@ -7,12 +7,13 @@ output: html_document
 
 Libraries and data import and removing irrelevant data
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 
 library(tidyverse)
 library(readxl)
 library(ggridges)
+library(car)
 
 theme_set(theme_bw()+
   theme(axis.text=element_text(size=12),
@@ -196,7 +197,7 @@ highdiv_biov <- filter(biovolumes_with_broken, species_richness==3, strains==3)
 ```
 
 
-# Analysis of size by environment and diversity treatments
+# Effects of environment on cell sizes
 
 ## monocultures
 ```{r}
@@ -274,6 +275,62 @@ ggplot(biovolumes_with_broken, aes(biov))+
   geom_density()+
   facet_grid(temp~nuts)+
   scale_x_log10()
+```
+
+# Effects of species and strain richness on size diversity
+
+```{r}
+
+size_by_well <- biovolumes_with_broken %>% 
+  group_by(plate, well, species_richness, strains, temp, nuts) %>%
+  summarize(var_biov=var(biov),
+            mean_biov=mean(biov),
+            CV_biov=sd(biov)/mean(biov))
+
+allmaxRFUandfits <- read_csv("allmaxRFUandfits17.7.20_withK400allowed.csv")
+
+sizesandRFU <- left_join(allmaxRFUandfits, size_by_well) %>% 
+  mutate(totalstrains=species_richness*strains)
+
+```
+
+```{r}
+ggplot(sizesandRFU, aes(species_richness, CV_biov))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm", formula = y ~ x + I(x^2))+
+  xlab("Species richness")+
+  ylab("Cell size variation (CV)")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()
+
+
+ggplot(sizesandRFU, aes(strains, CV_biov))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm", formula = y ~ x + I(x^2))+
+  xlab("Strain richness per species")+
+  ylab("Cell size variation (CV)")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()
+
+ggplot(sizesandRFU, aes(strains, CV_biov))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm", formula = y ~ x + I(x^2))+
+  xlab("Strain richness per species")+
+  ylab("Cell size variation (CV)")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()+
+  facet_grid(temp~species_richness)
+
+fit <- lm(data=sizesandRFU, CV_biov~species_richness*strains)
+summary(fit)
+avPlots(fit)
+
+fit <- lm(data=sizesandRFU, CV_biov~species_richness*strains*temp*nuts)
+summary(fit)
+avPlots(fit)
 ```
 
 
