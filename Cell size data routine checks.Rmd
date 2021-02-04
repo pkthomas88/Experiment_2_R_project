@@ -186,6 +186,13 @@ biovolumes_with_broken <- biovolumes_with_broken %>%
   mutate(biov = ifelse(species=='tnema', l*h*h, biov)) %>% 
   mutate(biov=as.integer(biov))
 
+biovolumes_with_broken <- biovolumes_with_broken %>% 
+  mutate(AR ='NA') %>%
+  mutate(AR = ifelse(species=='dity', h/w, AR)) %>% 
+  mutate(AR = ifelse(species=='rhizo', h/d, AR)) %>%
+  mutate(AR = ifelse(species=='tnema', l/h, AR)) %>% 
+  mutate(AR=as.numeric(AR))
+
 ```
 
 
@@ -340,15 +347,92 @@ avPlots(fit)
 ```{r}
 ```
 
+# Shapes
 
 ```{r}
+
+ggplot(mono_biov, aes(x = AR, y = div_tx))+
+  geom_density_ridges()+
+  scale_x_log10()
+  
+ggplot(mono_biov, aes(x = AR, y = as.factor(temp)))+
+  geom_density_ridges()+
+  facet_wrap(~div_tx)+
+  scale_x_log10()
+
+ggplot(mono_biov, aes(x = AR, y = as.factor(nuts)))+
+  geom_density_ridges()+
+  facet_wrap(~div_tx)+
+  scale_x_log10()
+
+```
+
+## All diversity treatments
+
+```{r}
+ggplot(biovolumes_with_broken, aes(x = AR, y = as.factor(temp)))+
+  geom_density_ridges()+
+  scale_x_log10()
+
+ggplot(biovolumes_with_broken, aes(x = AR, y = as.factor(nuts)))+
+  geom_density_ridges()+
+  scale_x_log10()
+
+ggplot(biovolumes_with_broken, aes(AR))+
+  geom_density()+
+  facet_grid(temp~nuts)+
+  scale_x_log10()
 ```
 
 
 ```{r}
+mono_biov %>% 
+  filter(!is.na(biov), !is.na(AR), is.na(broken)) %>% 
+  ggplot(aes(biov, AR, color=species))+
+  geom_point()+
+  scale_x_log10()+
+  scale_y_log10()
+
+mono_biov %>% 
+  filter(!is.na(biov), !is.na(AR), is.na(broken)) %>% 
+  ggplot(aes(biov, AR, color=div_tx))+
+  geom_point(size=2)+
+  scale_x_log10()+
+  scale_y_log10()
+
 ```
 
+for ppt
+
 ```{r}
+
+mono_biov %>% 
+  filter(is.na(broken)) %>% 
+  ggplot(aes(x = biov, y = div_tx))+
+  geom_density_ridges()+
+  scale_x_log10()+
+  xlab("biovolume")+
+  ylab("strain")
+
+
+mono_biov %>% 
+  filter(is.na(broken)) %>% 
+  ggplot(aes(x = AR, y = div_tx))+
+  geom_density_ridges()+
+  scale_x_log10()+
+  xlab("aspect ratio")+
+  ylab("strain")
+
+mono_biov %>% 
+  filter(is.na(broken)) %>% 
+  ggplot(aes(biov, AR, color=div_tx))+
+  geom_point(size=2)+
+  scale_x_log10()+
+  scale_y_log10()+
+  xlab("biovolume")+
+  ylab("aspect ratio")
+
+
 ```
 
 
