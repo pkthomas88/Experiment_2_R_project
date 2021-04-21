@@ -1,29 +1,55 @@
 ---
 title: "Cell size data routine checks"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
 # Data import and setup
 
 Libraries and data import and removing irrelevant data
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(fig.width=6, fig.height=4, fig.path='Figs/sizes/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
 
 
 library(tidyverse)
 library(readxl)
 library(ggridges)
 library(car)
+library(readxl)
+library(ggpubr)
+library(stringi)
 
 theme_set(theme_bw()+
   theme(axis.text=element_text(size=12),
   axis.title.x = element_text(size = 16),
   axis.title.y = element_text(size = 16)))
 
-sizechecks <- read_excel("C:/Users/pktho/OneDrive/Experiment 2 ALL SYSTEMATIC PHOTOS/Experiment 2 cell sizes 14.01.21_PTchanges.xlsx", 
-    sheet = "all cell measurements")
+select <- dplyr::select
 
-sizechecks <- sizechecks[1:17]
+marrit_cells <- read_excel("Experiment 2 cell sizes 01.04.21_MJ.xlsx", 
+    sheet = "all cell measurements") %>% 
+  filter(entrant=='MJ') %>% 
+  dplyr::select(plate:note2)
+summary(marrit_cells)
+
+
+svenja_cells <- read_excel("Experiment 2 cell sizes 20.03.21_SW_final.xlsx", 
+    sheet = "all cell measurements") %>% 
+  filter(entrant=='SW') %>% 
+  dplyr::select(plate:note2)
+summary(svenja_cells)
+
+
+sizechecks <- bind_rows(marrit_cells, svenja_cells)
+summary(sizechecks)
+
+#sizechecks <- read_excel("C:/Users/pktho/OneDrive/Experiment 2 ALL SYSTEMATIC PHOTOS/Experiment 2 cell sizes 14.01.21_PTchanges.xlsx", 
+#    sheet = "all cell measurements")
+
+#sizechecks <- sizechecks[1:17]
 sizechecks <- sizechecks %>% 
   filter(entrant!="PT") %>% 
   mutate(distance=distance/1000) %>% 
@@ -31,9 +57,13 @@ sizechecks <- sizechecks %>%
   mutate(species=ifelse(species=="thalasso", "tnema", species))
   #because it thinks commas are thousands and not decimal point but careful with this!!
 
+
+summary(sizechecks)
+str(sizechecks)
+
 ```
 
-Checking that the dimensions make sense for each species. On second thought though I think this would be best to check in excel to make sure I change errors to the right dimension (like would 'l' for dity really be h or w?)
+>Checking that the dimensions make sense for each species. On second thought though I think this would be best to check in excel to make sure I change errors to the right dimension (like would 'l' for dity really be h or w?)
 
 ```{r eval=FALSE, include=FALSE}
 #yeah for example there are some that have dimension labels that will cause problems
@@ -70,8 +100,9 @@ grouped <- sizechecks %>% group_by(nuts, temp, species_richness, strains) %>%
   summarize(count=n())
 
 ggplot(grouped, aes(strains, count))+
-  geom_point()+
-  facet_grid(temp~species_richness)
+  geom_col(aes(fill=nuts), position = 'dodge')+
+  facet_grid(temp~species_richness)+
+  ylab('Total number of measurements')
 
 #checks which wells have been done already
 
@@ -88,25 +119,29 @@ cell_id_checks <- sizechecks %>%
   count(cell_id) %>% 
   filter(n>2)
 
+FIX <- nrow(cell_id_checks)
+
 biovolumes_wide <- sizechecks %>%
   pivot_wider(names_from = dimension,
               values_from = distance,
-              values_fn = length,
+              values_fn = length, # THIS GIVES THE LENGTH, not actual values, just for checking data
               id_cols = cell_id)
 
 #not sure why this gives a different number than the chunk above where it gives 56 with too many cell_ids, this gives 174??
 
 ```
 
+> there are currently `r FIX` cell ID's that have too much data and need to be fixed
+
 Using pivot wider to check if there are errors with cell_id (more than one or 2 per cell id = problematic)
 
 ```{r}
 
-
 biovolumes_wide_check_counts <- biovolumes_wide %>% filter(h>1 | w>1 | d>1 | h>1)
+
 ```
 
-For now, attempting to exclude ones where the cell_ids are weird, but for the final analysis need to either manually fix those in excel, since that might be tough to do in R
+> For now, attempting to exclude ones where the cell_ids are weird, but for the final analysis need to either manually fix those in excel, since that might be tough to do in R
 
 > And even after I exclude the weird ones it still gives issues with pivot_wider :/
 
@@ -136,7 +171,7 @@ biovolumes_wide_clean4 <- biovolumes_wide_clean3 %>%
               
 ```
 
-Since pivot_wider is being really shitty, I'll just take the mean values for things that are weird, but this needs to be fixed
+>Since pivot_wider is being really shitty, I'll just take the mean values for things that are weird, but this needs to be fixed. for preliminary work only about `r round(100*(FIX/nrow(sizechecks)), 2)`% are weird so this can be temporarily ignored
 
 ```{r}
 
@@ -147,6 +182,7 @@ biovolumes_wide <- sizechecks %>%
               #id_cols = cell_id)
 
 ```
+
 
 Separating the broken vs non-broken cells, separating species
 
@@ -195,6 +231,27 @@ biovolumes_with_broken <- biovolumes_with_broken %>%
 
 ```
 
+```{r}
+biovolumes_with_broken <- biovolumes_with_broken %>%
+  mutate(fullname = "NA") %>% 
+  mutate(fullname = ifelse(div_tx=='DB', 'Ditylum (Borkum)', fullname))%>%
+  mutate(fullname = ifelse(div_tx=='DH', 'Ditylum (Helgoland)', fullname))%>% 
+  mutate(fullname = ifelse(div_tx=='DK', 'Ditylum (Kiel)', fullname))%>% 
+  mutate(fullname = ifelse(div_tx=='RB', 'Rhizosolenia (Borkum)', fullname))%>% 
+  mutate(fullname = ifelse(div_tx=='RH', 'Rhizosolenia (Helgoland)', fullname))%>% 
+  mutate(fullname = ifelse(div_tx=='RK', 'Rhizosolenia (Kiel)', fullname))%>% 
+  mutate(fullname = ifelse(div_tx=='TB', 'Thalassionema (Borkum)', fullname))%>% 
+  mutate(fullname = ifelse(div_tx=='TH', 'Thalassionema (Helgoland)', fullname))%>% 
+  mutate(fullname = ifelse(div_tx=='TK', 'Thalassionema (Kiel)', fullname))%>% 
+  mutate(species_full="NA") %>% 
+  mutate(species_full = ifelse(species=='dity', 'Ditylum brightwelii', species_full))%>% 
+  mutate(species_full = ifelse(species=='rhizo', 'Rhizosolenia setigera', species_full))%>% 
+  mutate(species_full = ifelse(species=='tnema', 'Thalassionema nitzschiodes', species_full)) %>% 
+  mutate(fullname=fct_rev(fullname)) %>% 
+  mutate(nuts_temp=paste(nuts, temp, sep = "."))
+
+```
+
 
 ```{r}
 mono_biov <- filter(biovolumes_with_broken, species_richness==1, strains==1)
@@ -204,58 +261,77 @@ highdiv_biov <- filter(biovolumes_with_broken, species_richness==3, strains==3)
 ```
 
 
-# Effects of environment on cell sizes
+# Effects of environment on cell sizes and shapes
 
-## monocultures
+## monocultures and sizes
 ```{r}
 
-#COOL fake data!
+mono_biov$nuts_temp <- ordered(mono_biov$nuts_temp, levels = (c("low.8","low.12","low.16",
+                                                            "high.8", "high.12", "high.16")))
+highdiv_biov$nuts_temp <- ordered(highdiv_biov$nuts_temp, levels = (c("low.8","low.12","low.16",
+                                                            "high.8", "high.12", "high.16")))
 
-ggplot(mono_biov, aes(x = biov, y = div_tx))+
-  geom_density_ridges()+
-  scale_x_log10()
+ggplot(mono_biov, aes(x = biov, y = fullname))+
+  geom_density_ridges(aes(fill=species_full), size = 1.2)+
+  scale_x_log10()+
+  ylab('Diatom strain identity')+
+  xlab(bquote("Biovolume" ~(µm^3)))+
+  theme(legend.position = "none")
   
-ggplot(mono_biov, aes(x = biov, y = as.factor(temp)))+
-  geom_density_ridges()+
-  facet_wrap(~div_tx)+
-  scale_x_log10()
 
-ggplot(mono_biov, aes(x = biov, y = as.factor(nuts)))+
-  geom_density_ridges()+
-  facet_wrap(~div_tx)+
-  scale_x_log10()
+ggplot(mono_biov, aes(x = biov, y = as.factor(nuts_temp)))+
+  geom_density_ridges(aes(fill=species_full), size = 1.2)+
+  facet_wrap(~fct_rev(fullname), scales = 'free')+
+  scale_x_log10()+
+  ylab('Nutrient × temperature environment')+
+  xlab(bquote("Biovolume" ~(µm^3)))+
+  theme(legend.position = "none")
 
-ggplot(mono_biov, aes(x = as.factor(temp), y = biov, fill=nuts))+
-  facet_wrap(~div_tx, scales = 'free')+
-  geom_violin()+
-  scale_y_log10()
-
-ggplot(mono_biov, aes(x = as.factor(temp), y = biov, fill=nuts))+
-  facet_wrap(~div_tx, scales = 'free')+
-  geom_boxplot()+
-  scale_y_log10()
 
 ```
+
+##monocultures and shapes
+
+```{r}
+
+ggplot(mono_biov, aes(x = AR, y = fullname))+
+  geom_density_ridges(aes(fill=species_full), size = 1.2)+
+  scale_x_log10()+
+  ylab('Diatom strain identity')+
+  xlab("Aspect ratio")+
+  theme(legend.position = "none")
+  
+
+ggplot(mono_biov, aes(x = AR, y = as.factor(nuts_temp)))+
+  geom_density_ridges(aes(fill=species_full), size = 1.2)+
+  facet_wrap(~fct_rev(fullname), scales = 'free')+
+  scale_x_log10()+
+  ylab('Nutrient × temperature environment')+
+  xlab("Aspect ratio")+
+  theme(legend.position = "none")
+
+
+```
+
 
 ## 3 species 3 strains
 
 Density plots of size by temperature for high diversity treatments
 
 ```{r}
-ggplot(highdiv_biov, aes(x = biov, y = as.factor(temp)))+
-  geom_density_ridges()+
-  facet_wrap(~div_tx)+
-  scale_x_log10()
 
-ggplot(highdiv_biov, aes(x = biov, y = as.factor(nuts)))+
-  geom_density_ridges()+
-  facet_wrap(~div_tx)+
-  scale_x_log10()
+########
 
-ggplot(highdiv_biov, aes(biov))+
-  geom_density()+
-  facet_grid(temp~nuts)+
-  scale_x_log10()
+ggplot(highdiv_biov, aes(x = biov, y = as.factor(nuts_temp)))+
+  geom_density_ridges(fill='#00AFBB', size = 1.4)+
+  scale_x_log10()+
+  ylab('Nutrient × temperature environment')+
+  xlab(bquote("Biovolume" ~(µm^3)))+
+  theme(legend.position = "none")
+
+########
+
+
 
 ggplot(highdiv_biov, aes(as.factor(temp), biov,  fill=nuts))+
   geom_boxplot()+
@@ -270,74 +346,249 @@ ggplot(highdiv_biov, aes(as.factor(temp), biov,  fill=nuts))+
 ## All diversity treatments
 
 ```{r}
-ggplot(biovolumes_with_broken, aes(x = biov, y = as.factor(temp)))+
-  geom_density_ridges()+
-  scale_x_log10()
-
-ggplot(biovolumes_with_broken, aes(x = biov, y = as.factor(nuts)))+
-  geom_density_ridges()+
-  scale_x_log10()
-
-ggplot(biovolumes_with_broken, aes(biov))+
-  geom_density()+
-  facet_grid(temp~nuts)+
-  scale_x_log10()
+# ggplot(biovolumes_with_broken, aes(x = biov, y = as.factor(temp)))+
+#   geom_density_ridges()+
+#   scale_x_log10()
+# 
+# ggplot(biovolumes_with_broken, aes(x = biov, y = as.factor(nuts)))+
+#   geom_density_ridges()+
+#   scale_x_log10()
+# 
+# ggplot(biovolumes_with_broken, aes(biov))+
+#   geom_density()+
+#   facet_grid(temp~nuts)+
+#   scale_x_log10()
 ```
 
 # Effects of species and strain richness on size diversity
 
+
+> not having any fucking luck with left_join today so this shit doesn't work
+
+>FIXED THE STUPID BACKWARDS WELL NAMES!!!!!!!!!!!!!!!!!!!!!!!! then left_join worked
+
+
+
+
 ```{r}
 
 size_by_well <- biovolumes_with_broken %>% 
-  group_by(plate, well, species_richness, strains, temp, nuts) %>%
+  group_by(plate, well, species_richness, strains,
+           temp, nuts, nuts_temp) %>%
   summarize(var_biov=var(biov),
             mean_biov=mean(biov),
-            CV_biov=sd(biov)/mean(biov))
+            CV_biov=sd(biov)/mean(biov)) %>% 
+  mutate(plate=as.character(plate)) %>% 
+  mutate(temp = as.character(temp)) %>% 
+  filter(!is.na(CV_biov))
 
-allmaxRFUandfits <- read_csv("allmaxRFUandfits17.7.20_withK400allowed.csv")
+size_by_well$well<- stri_reverse(size_by_well$well)
 
-sizesandRFU <- left_join(allmaxRFUandfits, size_by_well) %>% 
-  mutate(totalstrains=species_richness*strains)
+#splits <- strsplit(size_by_well$well, "")[[1]]
+#size_by_well$well <-  intToUtf8(rev(utf8ToInt(size_by_well$well)))
+
+#mutate(plate_well = paste(plate, well)) %>% 
+
+size_by_well$nuts_temp <- ordered(size_by_well$nuts_temp, levels = (c("low.8","low.12","low.16","high.8", "high.12", "high.16")))
+
+#allmaxRFUandfits <- read_csv("allmaxRFUandfits17.7.20_withK400allowed.csv")
+
+#sizesandRFU <- left_join(allmaxRFUandfits, size_by_well) %>% 
+#  mutate(totalstrains=species_richness*strains)
 
 ```
 
+
 ```{r}
-ggplot(sizesandRFU, aes(species_richness, CV_biov))+
+
+
+
+```
+
+## plots
+ 
+```{r}
+# add this for nonlinear fit
+# stat_smooth(method = "lm", formula = y ~ x + I(x^2))+
+
+A <- ggplot(size_by_well, aes(species_richness, CV_biov))+
   geom_point()+
   #geom_smooth(method="lm")+
-  stat_smooth(method = "lm", formula = y ~ x + I(x^2))+
+  stat_smooth(method = "lm")+
   xlab("Species richness")+
   ylab("Cell size variation (CV)")+
   scale_x_continuous(breaks=c(1,2,3))+
   scale_y_log10()
+A
 
-
-ggplot(sizesandRFU, aes(strains, CV_biov))+
+B <- ggplot(size_by_well, aes(strains, CV_biov))+
   geom_point()+
   #geom_smooth(method="lm")+
-  stat_smooth(method = "lm", formula = y ~ x + I(x^2))+
+  stat_smooth(method = "lm")+
   xlab("Strain richness per species")+
   ylab("Cell size variation (CV)")+
   scale_x_continuous(breaks=c(1,2,3))+
   scale_y_log10()
+B
 
-ggplot(sizesandRFU, aes(strains, CV_biov))+
+ggarrange(A,B)
+
+
+A <- ggplot(size_by_well, aes(species_richness, var_biov))+
   geom_point()+
   #geom_smooth(method="lm")+
-  stat_smooth(method = "lm", formula = y ~ x + I(x^2))+
-  xlab("Strain richness per species")+
-  ylab("Cell size variation (CV)")+
+  stat_smooth(method = "lm")+
+  xlab("Species richness")+
+  ylab("Cell size variance")+
   scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()
+A
+
+B <- ggplot(size_by_well, aes(strains, var_biov))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Strain richness per species")+
+  ylab("Cell size variance")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()
+B
+
+ggarrange(A,B)
+
+
+ggplot(size_by_well, aes(species_richness, CV_biov))+
+  geom_jitter(width = 0.02, alpha = 0.5,aes(color=as.factor(strains)))+
+  geom_smooth(size = 1.5, se = FALSE, method = 'lm', aes(color = as.factor(strains)))+
   scale_y_log10()+
-  facet_grid(temp~species_richness)
+  facet_wrap(~nuts_temp, scales = 'free')+
+  xlab("Species richness")+
+  labs(color = "Strain richness")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  ylab('Cell size variation (CV)')
 
-fit <- lm(data=sizesandRFU, CV_biov~species_richness*strains)
-summary(fit)
-avPlots(fit)
+ggplot(size_by_well, aes(strains, CV_biov))+
+  geom_jitter(width = 0.02, alpha = 0.5,aes(color=as.factor(strains)))+
+  geom_smooth(size = 1.5, se = FALSE, method = 'lm', aes(color = as.factor(species_richness)))+
+  scale_y_log10()+
+  facet_wrap(~nuts_temp, scales = 'free')+
+  xlab("Strain richness")+
+  labs(color = "Species richness")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  ylab('Cell size variation (CV)')
 
-fit <- lm(data=sizesandRFU, CV_biov~species_richness*strains*temp*nuts)
-summary(fit)
-avPlots(fit)
+
+# 
+# 
+# ggplot(size_by_well, aes(nuts_temp, CV_biov))+
+#   geom_boxplot()+
+#   #geom_smooth(method="lm")+
+#   xlab("Nutrient x temperature environment")+
+#   ylab("Cell size variation (CV)")+
+#   scale_y_log10()
+#
+```
+
+## size div vs biomass plots
+
+```{r}
+ggplot(full_df, aes(CV_biov, maxRFU))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Cell size variation (CV)")+
+  ylab("Biomass (max fluorescence)")+
+  scale_x_log10()+
+  scale_y_log10()
+
+C <- ggplot(full_df, aes(mean_biov, maxRFU))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Mean biovolume")+
+  ylab("Biomass (max fluorescence)")+
+  scale_x_log10()+
+  scale_y_log10()
+
+D <- ggplot(full_df, aes(var_biov, maxRFU))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Variance biovolume")+
+  ylab("Biomass (max fluorescence)")+
+  scale_x_log10()+
+  scale_y_log10()
+
+ggarrange(C,D)
+
+```
+
+## models
+
+
+> models for CV size with varying interactions etc
+
+```{r}
+fit1 <- lm(data=size_by_well, CV_biov~species_richness*strains)
+summary(fit1)
+avPlots(fit1)
+
+fit2 <- lm(data=size_by_well, CV_biov~species_richness*strains + temp + nuts)
+summary(fit2)
+avPlots(fit2)
+
+fit2.1 <- lm(data=size_by_well, CV_biov~species_richness*strains + temp*nuts)
+summary(fit2.1)
+avPlots(fit2.1)
+
+
+fit3 <- lm(data=size_by_well, CV_biov~species_richness + strains + temp + nuts)
+summary(fit3)
+avPlots(fit3)
+
+
+
+# or at least try something along these lines with lme4...
+
+#fit3 <- lmer(data=size_by_well, CV_biov ~ species_richness + strains + 1|temp)
+#summary(fit3)
+
+
+AIC(fit1, fit2, fit2.1, fit3)
+
+```
+
+
+> models for variance in size (otherwise same as above)
+
+```{r}
+fit1 <- lm(data=size_by_well, var_biov~species_richness*strains)
+summary(fit1)
+avPlots(fit1)
+
+fit2 <- lm(data=size_by_well, var_biov~species_richness*strains + temp + nuts)
+summary(fit2)
+avPlots(fit2)
+
+fit2.1 <- lm(data=size_by_well, var_biov~species_richness*strains + temp*nuts)
+summary(fit2.1)
+avPlots(fit2.1)
+
+
+fit3 <- lm(data=size_by_well, var_biov~species_richness + strains + temp + nuts)
+summary(fit3)
+avPlots(fit3)
+
+
+
+# or at least try something along these lines with lme4...
+
+#fit3 <- lmer(data=size_by_well, CV_biov ~ species_richness + strains + 1|temp)
+#summary(fit3)
+
+
+AIC(fit1, fit2, fit2.1, fit3)
+
 ```
 
 
@@ -435,4 +686,33 @@ mono_biov %>%
 
 ```
 
+
+checking min and max sizes by strains because I just got 18s results back and they don't quite match with the actual sizes esp tnema
+
+```{r}
+mono_biov
+
+mono_biov %>%
+  filter(!is.na(h), !is.na(l)) %>% 
+  group_by(div_tx) %>% 
+  summarize(minh=min(h), minl=min(l), maxh=max(h), maxl=max(l))
+
+sdfdsf <- mono_biov %>%
+  group_by(div_tx) %>% 
+  summarize(minh=min(h), minl=min(l), minw=min(w), mind=min(d))
+            
+            
+mono_biov %>% 
+  group_by(div_tx) %>%
+  summarize(maxh=max(h), maxl=max(l), maxw=max(w), maxd=max(d))
+
+
+```
+
+
+
+
+```{r}
+knitr::knit_exit()
+```
 

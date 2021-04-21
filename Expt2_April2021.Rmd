@@ -1,0 +1,423 @@
+---
+title: "Expt2_April2021"
+subtitle: 'Summarizing the main results from the strain × species × size × temperature × nutrients experiment, from diversity-functioning by environment to size-diversity and size-environment relationships. This serves as the main hub for analysis, but currently I am using separate rmd file for the growth rate calculations and the cell size/shape calculations, which I then import here --> need to import that code here eventually'
+output: 
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float:
+      collapsed: false
+---
+
+# Setup: data import and wrangling
+
+## Import RFU file + saved growth rate file, filter NAs
+
+```{r setup}
+knitr::opts_chunk$set(fig.width=6, fig.height=4, fig.path='Figs/main/',
+                      echo=TRUE, warning=FALSE, message=FALSE)
+
+library(tidyverse)
+library(lavaan)
+library(nlme)
+library(lme4)
+library(lmerTest)
+library(car)
+library(MASS)
+library(broom)
+library(ggridges)
+
+
+theme_set(theme_bw()+
+  theme(axis.text=element_text(size=12),
+  axis.title.x = element_text(size = 16),
+  axis.title.y = element_text(size = 16)))
+
+# import growth rates for all tested models, written to csv because these take hours to compute, and pivot to wide form
+growth_rates <- read_csv("growthmodels_ALLDATA.csv",col_types = cols(plate = col_character())) %>% 
+  pivot_wider(names_from = model, values_from = c(mumax, r2))
+
+summary(growth_rates)
+
+df <- read_csv("Expt2.2RFU_CSV.csv", na="?????", col_types = cols(plate = col_character(), 
+    temp = col_character()))
+
+summary(df)
+
+df %>%
+  #select(day) %>% 
+  summarise_all(funs(sum(is.na(.))))
+
+df %>% filter(is.na(species)) # this leaves just the blanks, so that 's good
+
+df <- df %>%
+  filter(!is.na(plate)) %>% 
+  filter(!is.na(species)) # remove blank plates etc
+
+df <- filter(df, day>-1) # get rid of nonsense dates made by excel if any
+
+df$temp <- ordered(df$temp, levels = (c("8", "12", "16")))
+df$nuts <- ordered(df$nuts, levels = (c("low", "high")))
+```
+
+
+> Initial conditions
+
+```{r}
+# Import data with biov per cell already calculated, get rid of junk rows with blanks or 0s
+
+biovolumes_calculations_21_6_20 <- read_excel("C:/Users/pktho/Dropbox/Experiment 2 - clone stuff/biovolumes calculations 21.6.20.xlsx", 
+    sheet = "all_biov(not_median)")
+
+
+biovolumes_calculations_21_6_20 <- biovolumes_calculations_21_6_20 %>% 
+  filter(biov>0)
+
+summary(biovolumes_calculations_21_6_20)
+
+biovolumes_calculations_21_6_20_summarized <- biovolumes_calculations_21_6_20 %>% 
+  group_by(div_tx, strain) %>% 
+  summarize(min_biov=min(biov),
+            max_biov=max(biov),
+            mean_biov = mean(biov),
+            median_biov = median(biov),
+            sd_biov = sd(biov),
+            CV_biov = sd_biov/mean_biov)
+```
+
+> compare this to the end of experiment distributions (currently in cell size data routine checks file), looks similar though RB is bigger at end, Ditys more similar at end than at start (maybe just lower sample size --> analyze more initial inoc photos)
+
+```{r}
+biovolumes_calculations_21_6_20 %>% 
+  mutate(div_tx=fct_rev(div_tx)) %>% 
+ggplot(aes(x = biov, y = div_tx))+
+  geom_density_ridges(size = 1.2)+
+  scale_x_log10()+
+  ylab('Diatom strain identity')+
+  xlab(bquote("Biovolume" ~(µm^3)))+
+  theme(legend.position = "none")
+```
+
+## Calculate max RFUs
+
+```{r}
+
+maxRFUs <- df %>%
+  group_by(plate, well, div_tx, strains, species, nuts, temp) %>%
+  summarize(maxRFU=max(RFU, na.rm=TRUE)) %>% 
+  mutate(logmaxRFU=log(maxRFU))%>% 
+  mutate(plate_well=paste(plate, well)) %>% 
+  mutate(nuts_temp=paste(nuts, temp, sep="."))
+
+
+full_df <- left_join(maxRFUs, growth_rates)
+
+
+full_df$temp <- ordered(full_df$temp, levels = (c("8", "12", "16")))
+full_df$nuts <- ordered(full_df$nuts, levels = (c("low", "high")))
+full_df$nuts_temp <- ordered(full_df$nuts_temp, levels = (c("low.8","low.12","low.16",
+                                                            "high.8", "high.12", "high.16")))
+
+```
+
+## Calculate net biodiversity effects (NBE)
+
+> this is still a pain in the ass and i don't know how to do it
+
+```{r eval=FALSE, include=FALSE}
+
+full_df %>% 
+  filter(species==1, strains==1)# %>% 
+  group_by(nuts, temp, plate, well, div_tx) %>% 
+  summarize(mean_mono=)
+
+
+  
+  
+```
+
+## [***Calculate size diversity metrics***]{.ul}
+
+> do this!
+
+
+> adding CV biovolume for now to the main data frame
+
+
+
+>WHAWT THE FUCK WHY DOESN"T FUCKGFOINDAFKLDNF LEFTJOIN WORKSNFLKASDNF:LKSDFSDASFADASFIPHDASJIF
+
+```{r}
+
+size_by_well2 <- size_by_well%>%
+   ungroup() %>%
+   select(plate, well, var_biov, mean_biov, CV_biov)
+str(size_by_well2)
+
+full_df2 <- full_df %>% ungroup()
+str(full_df2)
+# 
+# size_by_well <- size_by_well %>%
+#   mutate(plate = as.character(plate)) %>%
+#   mutate(well = as.character(well))
+# 
+# full_df <- full_df %>%
+#   mutate(plate = as.character(plate)) %>%
+#   mutate(well = as.character(well))
+# 
+# full_df2 <- left_join(full_df, size_by_well)
+# 
+# summary(full_df2)
+# summary(size_by_well)
+
+size_by_well3 <- size_by_well%>%
+   #ungroup() %>%
+  # select(plate, well, nuts) %>% 
+  arrange(plate_well)
+
+
+
+full_df <- left_join(full_df, size_by_well)
+summary(full_df)
+
+```
+
+
+
+# Diversity ➜ functioning (with environment as moderator
+
+## Species × strain diversity ➜ functioning
+
+### plots
+
+```{r}
+
+
+#############
+ggplot(full_df, aes(species, maxRFU))+
+  geom_jitter(width = 0.02)+
+  geom_smooth(method = 'lm', se=TRUE)+
+  scale_y_log10()+
+  xlab("Species richness")+
+  labs(color = "Strain richness")+
+  ylab('Biomass (max fluorescence)')
+
+ggplot(full_df, aes(as.factor(strains), maxRFU))+
+  geom_jitter(width = 0.02)+
+  #geom_smooth(method = 'lm')+
+  scale_y_log10()
+
+############
+
+# ggplot(full_df, aes(as.factor(species), maxRFU))+
+#   geom_jitter(width = 0.02)+
+#   #geom_smooth(method = 'lm')+
+#   scale_y_log10()+
+#   facet_wrap(~strains)
+# 
+# ggplot(full_df, aes(as.factor(strains), maxRFU))+
+#   geom_jitter(width = 0.02)+
+#   #geom_smooth(method = 'lm')+
+#   scale_y_log10()+
+#   facet_wrap(~species)
+
+ggplot(full_df, aes(as.factor(species), maxRFU))+
+  #geom_jitter(width = 0.02)+
+  #geom_smooth(method = 'lm')+
+  scale_y_log10()+
+  facet_wrap(~nuts_temp, scales = 'free')+
+  stat_summary(position = position_dodge(width = 0.9),
+               fun = mean, geom = "point", aes(color=as.factor(strains)))+
+  stat_summary(position = position_dodge(width = 0.9),
+               fun.data = mean_cl_normal, geom = "pointrange",
+               fun.args = list(mult = 1),
+               aes(color=as.factor(strains)))+
+    xlab("Species richness")+
+  labs(color = "Strain richness")+
+  ylab('Biomass (max fluorescence)')+
+  geom_vline(xintercept = 1.5)+
+    geom_vline(xintercept = 2.5)
+
+ggsave('plot.png', width = 6, height = 4)
+
+##########
+ggplot(full_df, aes(species, maxRFU))+
+  geom_jitter(width = 0.02, alpha = 0.5,aes(color=as.factor(strains)))+
+  geom_smooth(size = 1.5, se = FALSE, method = 'lm', aes(color = as.factor(strains)))+
+  scale_y_log10()+
+  facet_wrap(~nuts_temp, scales = 'free')+
+  xlab("Species richness")+
+  labs(color = "Strain richness")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  ylab('Biomass (max fluorescence)')
+
+
+
+ggplot(full_df, aes(strains, maxRFU))+
+  geom_jitter(width = 0.02, alpha = 0.5, aes(color=as.factor(species)))+
+  geom_smooth(size = 1.5, se = FALSE, method = 'lm', aes(color = as.factor(species)))+
+  scale_y_log10()+
+  facet_wrap(~nuts_temp, scales = 'free')+
+  xlab("Strain richness")+
+  labs(color = "Species richness")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  ylab('Biomass (max fluorescence)')
+############
+
+ggplot(full_df, aes(species, mumax_exp))+
+  geom_jitter(width = 0.02, alpha = 0.5,aes(color=as.factor(strains)))+
+  geom_smooth(size = 1.5, se = FALSE, method = 'lm', aes(color = as.factor(strains)))+
+  scale_y_log10()+
+  facet_wrap(~nuts_temp, scales = 'free')+
+  xlab("Species richness")+
+  labs(color = "Strain richness")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  ylab('growth rate- exp model')
+
+```
+
+### models
+
+> taking a look at normality, not clear if this should be normal for just the nut x temp envt, or for each species/strain richness level.
+
+>do this for growth rates too maaybe
+
+```{r}
+
+df_shapiro <- full_df %>% 
+  group_by(nuts, temp, species, strains) %>% #maybe by species, strains too???? 
+  mutate(n = n()) %>% 
+  group_by(nuts, temp, species, strains, n) %>%
+  do(tidy(shapiro.test(.$maxRFU))) %>% # only works if you include the broom::tidy in here
+  ungroup()
+
+ggplot(df_shapiro, aes(p.value))+
+  geom_histogram()+
+  geom_vline(xintercept = 0.05)
+
+
+df_shapiro_log <- full_df %>% 
+  group_by(nuts, temp, species, strains) %>% #maybe by species, strains too???? 
+  mutate(n = n()) %>% 
+  group_by(nuts, temp, species, strains, n) %>%
+  do(tidy(shapiro.test(.$logmaxRFU))) %>% # only works if you include the broom::tidy in here
+  ungroup()
+
+ggplot(df_shapiro_log, aes(p.value))+
+  geom_histogram()+
+  geom_vline(xintercept = 0.05)
+
+a <- df_shapiro %>% filter(p.value<0.05) %>% nrow()
+b <- df_shapiro_log %>% filter(p.value<0.05) %>% nrow()
+
+```
+
+> but as is, there are `r a` non-normal distributions before log transforming maxRFU and `r b` after log transformation (out of 54 with this grouping)
+
+> these are all just playing around, need to figure out the right way to include species\*strain as fixed effects and nuts + temp as either fixed or random effects. but mod1.1 makes the most sense to me at the moment, and log transforming seems to normalize things
+
+> add size diversity here at some point
+
+```{r}
+
+# linear model with interaction only for sp and strain richness
+
+mod1 <- lm(data = full_df, maxRFU ~ species*strains + nuts + temp)
+summary(mod1)
+avPlots(mod1)
+
+mod1.1 <- lm(data = full_df, log(maxRFU) ~ species*strains + nuts*temp)
+summary(mod1.1)
+avPlots(mod1.1)
+plot(mod1.1)
+vif(mod1.1)
+
+
+mod1.2 <- lm(data = full_df, log(maxRFU) ~ species*strains + nuts*temp)
+summary(mod1.2)
+avPlots(mod1.2)
+plot(mod1.2)
+vif(mod1.2)
+
+mod1.3 <- lm(data = full_df, log(maxRFU) ~ species*strains + nuts*temp + mean_biov + var_biov)
+summary(mod1.3)
+avPlots(mod1.3)
+plot(mod1.3)
+vif(mod1.3)
+
+# linear model with all the interactions
+
+mod2 <- lm(data = full_df, maxRFU ~ species*strains*nuts*temp)
+summary(mod2)
+
+#trying mixed model with nlme, not sure if this is how to add the random effects though!
+
+mod3 <- lme(data = full_df, maxRFU ~ species*strains, random =list(nuts=~1, temp=~1))
+summary(mod3)
+
+
+#trying mixed model with lme4, I guess this is just random intercepts????
+
+mod4 <- lmer(data = full_df, maxRFU ~ species*strains + (1|nuts) + (1|temp))
+summary(mod4)
+
+#
+
+mod5 <- lmer(data = full_df, maxRFU ~ species*strains + (nuts_temp|species) + (nuts_temp|strains))
+summary(mod5)
+
+
+mod6 <- lmer(data = full_df, maxRFU ~ species + strains + (species|nuts_temp) + (strains|nuts_temp))
+summary(mod6)
+
+AIC(mod1, mod1.1, mod2, mod3, mod4, mod5, mod6)
+
+fm1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+summary(fm1)
+
+ggplot(sleepstudy, aes(Days, Reaction))+
+  geom_point()+
+  geom_smooth(aes(color=Subject), method = 'lm', se=FALSE)
+
+```
+
+
+
+```{r}
+knitr::knit_exit()
+```
+
+
+
+> Notes from internet: if you use lme4 in conjunction with the lmerTest package you can specify the model and get the p-values you want (via Satterthwaite or Kenward-Roger approximation). The chances are reasonably good that lme wouldn't be giving you the correct p-value anyway ... -- Ben Bolker May 6 '14 at 18:13
+
+## Size diversity ➜ functioning
+
+# Diversity ➜ size effects
+
+# Alternatively, SEM to tie everything together
+
+```{r}
+
+model <- '
+  # measurement model
+  #  taxdiv =~ strains + species
+  # regressions
+    maxRFU ~ strains + species
+    maxRFU ~ temp + nuts
+'
+
+fit <- sem(model, data=full_df)
+summary(fit, standardized = TRUE)
+
+
+```
+
+# or lme to tie it all together
+
+```{r}
+
+
+
+
+```
