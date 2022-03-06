@@ -18,16 +18,29 @@ library(tidyverse)
 library(readxl)
 library(ggridges)
 library(car)
-library(readxl)
 library(ggpubr)
 library(stringi)
+library(lme4)
+library(cowplot)
 
 theme_set(theme_bw()+
-  theme(axis.text=element_text(size=12),
-  axis.title.x = element_text(size = 16),
-  axis.title.y = element_text(size = 16)))
+  theme(axis.text=element_text(size=16),
+  axis.title.x = element_text(size = 20),
+  axis.title.y = element_text(size = 20)))
 
 select <- dplyr::select
+
+jevergreen <- "#218D3A"
+
+jever_3color <- c("#297C8C", "#116D2B", "#B59557")
+
+jever_9color <- c("#297C8C", "#41C4DE", "#49DDFA",
+                  "#116D2B","#1BAD44","#24E85B",
+                  "#B59557", "#D1AC65", "#FACE79")
+
+palette_9color <- c("lightsalmon4","lightsalmon3","lightsalmon2",
+                    "turquoise4", "turquoise3", "turquoise2",
+                    "seagreen4", "seagreen3", "seagreen2")
 
 marrit_cells <- read_excel("Experiment 2 cell sizes 01.04.21_MJ.xlsx", 
     sheet = "all cell measurements") %>% 
@@ -250,6 +263,19 @@ biovolumes_with_broken <- biovolumes_with_broken %>%
   mutate(fullname=fct_rev(fullname)) %>% 
   mutate(nuts_temp=paste(nuts, temp, sep = "."))
 
+biovolumes_with_broken <- biovolumes_with_broken %>% 
+  group_by(plate, well, species_richness, strains,
+           temp, nuts, nuts_temp) %>% 
+  mutate(sum_biov_per_well = sum(biov)) %>% # total biovolume that was measured in transects per well
+  mutate(pi_biov = biov/sum_biov_per_well) %>% #proportion of biovolume that each cell represents of what was measured/counted
+  mutate(xi_pi_biov = biov*pi_biov) %>%  # weight each cell by its proportion of the assessed biovolume
+  mutate(CWM_kindof = sum(xi_pi_biov),
+         CW_distance = pi_biov*(biov-CWM_kindof)^2)
+
+
+summary(biovolumes_with_broken)
+dim(biovolumes_with_broken)
+
 ```
 
 
@@ -261,23 +287,140 @@ highdiv_biov <- filter(biovolumes_with_broken, species_richness==3, strains==3)
 ```
 
 
+
+>setting up summary metrics by well, including CV that I did at first, and then actually trying a CWM and CW variance approach
+
+```{r}
+
+size_by_well <- biovolumes_with_broken %>% 
+  group_by(plate, well, species_richness, strains,
+           temp, nuts, nuts_temp, fullname) %>% 
+  summarize(var_biov=var(biov),
+            mean_biov=mean(biov),
+            CV_biov=sd(biov)/mean(biov),
+            CWM_kindof2 = sum(xi_pi_biov),
+            CWM_kindof = unique(CWM_kindof),
+            pi_check = sum(pi_biov),
+            CW_variance = sum(CW_distance)) %>% 
+  mutate(plate=as.character(plate)) %>% 
+  mutate(temp = as.character(temp)) %>% 
+  filter(!is.na(CV_biov))
+
+size_by_well$well<- stri_reverse(size_by_well$well)
+
+write_csv(size_by_well, file = "size_by_well.csv")
+
+
+# check how the biovolume weighted mean and variance look compared to the raw (abundance-weighted) moments
+
+ggplot(size_by_well, aes(log(mean_biov), log(CWM_kindof)))+
+  geom_point()
+
+
+ggplot(size_by_well, aes(log(var_biov), log(CW_variance)))+
+  geom_point()
+
+ggplot(size_by_well, aes(var_biov, CW_variance))+
+  geom_point()+
+  scale_x_log10()+
+  scale_y_log10()
+
+
+#splits <- strsplit(size_by_well$well, "")[[1]]
+#size_by_well$well <-  intToUtf8(rev(utf8ToInt(size_by_well$well)))
+
+#mutate(plate_well = paste(plate, well)) %>% 
+
+size_by_well$nuts_temp <- ordered(size_by_well$nuts_temp, levels = (c("low.8","low.12","low.16","high.8", "high.12", "high.16")))
+
+#allmaxRFUandfits <- read_csv("allmaxRFUandfits17.7.20_withK400allowed.csv")
+
+#sizesandRFU <- left_join(allmaxRFUandfits, size_by_well) %>% 
+#  mutate(totalstrains=species_richness*strains)
+
+```
+
 # Effects of environment on cell sizes and shapes
 
 ## monocultures and sizes
 ```{r}
-
 mono_biov$nuts_temp <- ordered(mono_biov$nuts_temp, levels = (c("low.8","low.12","low.16",
                                                             "high.8", "high.12", "high.16")))
 highdiv_biov$nuts_temp <- ordered(highdiv_biov$nuts_temp, levels = (c("low.8","low.12","low.16",
                                                             "high.8", "high.12", "high.16")))
+```
 
-ggplot(mono_biov, aes(x = biov, y = fullname))+
+# >> nice fig1 option <<
+
+```{r}
+
+mono_biov <- mono_biov %>% 
+  mutate(origin = "NA") %>% 
+  mutate(origin = ifelse(grepl("Borkum", fullname),"Borkum", origin)) %>% 
+  mutate(origin = ifelse(grepl("Helgoland", fullname), "Helgoland", origin)) %>% 
+  mutate(origin = ifelse(grepl("Kiel", fullname), "Kiel", origin))
+
+
+fig1a <- ggplot(mono_biov, aes(x = biov, y = fullname))+
   geom_density_ridges(aes(fill=species_full), size = 1.2)+
   scale_x_log10()+
   ylab('Diatom strain identity')+
-  xlab(bquote("Biovolume" ~(µm^3)))+
-  theme(legend.position = "none")
+  xlab(bquote("Cell volume" ~(µm^3)))+
+  #scale_fill_brewer(palette = "Paired")+
+  scale_fill_manual(values = jever_3color)+
+  #scale_fill_manual(values = palette_9color)+
+  theme(legend.position = "none",
+  axis.text.x = element_text(size = 12),
+  axis.text.y = element_text(size = 12))
+fig1a
+
+fig1b <- ggplot(mono_biov, aes(x = AR, y = fullname))+
+  geom_density_ridges(aes(fill=species_full), size = 1.2, scale = 1)+
+  scale_x_log10()+
+  ylab('Diatom strain identity')+
+  xlab("Cell shape (aspect ratio)")+
+  #scale_fill_brewer(palette = "Paired")+
+  scale_fill_manual(values = jever_3color)+
+  theme(legend.position = "none",
+        axis.text.x = element_text(size = 12),
+  axis.text.y = element_text(size = 12))
+fig1b
+
+fig1c <- mono_biov %>% 
+  filter(!is.na(biov), !is.na(AR), is.na(broken)) %>% 
+  mutate(fullname = fct_rev(fullname)) %>% 
+  ggplot(aes(biov, AR, shape = origin, fill=species_full))+
+  #scale_x_discrete(limits = rev)+
+  #scale_fill_brewer(palette = "Paired", name = "Strain identity")+
+  scale_fill_manual(values = jever_3color, name = "Species")+
+  geom_point(color = "black", size=3, alpha = 0.6)+
+  scale_shape_manual(values = c(21, 22, 23), name = "Strain origin")+
+  scale_x_log10()+
+  scale_y_log10()+
+  ylab("Cell shape (aspect ratio)")+
+  xlab(bquote("Cell volume" ~(µm^3)))#
+fig1c
   
+
+left_side <- plot_grid(fig1a, fig1b, ncol=1, nrow = 2, labels = c('A', 'B'))
+
+plot_grid(left_side, fig1c, labels = c('', 'C'), rel_widths = c(1, 1.5))
+
+ggsave("march2022figs/fig1_sizesxshapes.png",  width = 180, height = 60, units = "mm", scale = 1, dpi = 600, device = "png")
+
+
+```
+
+
+```{r}
+ggplot(mono_biov, aes(x = biov, y = fullname))+
+  geom_density_ridges(aes(fill=fullname), size = 1.2)+
+  scale_x_log10()+
+  ylab('Diatom strain identity')+
+  xlab(bquote("Biovolume" ~(µm^3)))+
+  theme(legend.position = "none")+
+  geom_hline(yintercept =3.5, lty='dashed')
+ggsave("mono_sizes2.png")
 
 ggplot(mono_biov, aes(x = biov, y = as.factor(nuts_temp)))+
   geom_density_ridges(aes(fill=species_full), size = 1.2)+
@@ -286,6 +429,17 @@ ggplot(mono_biov, aes(x = biov, y = as.factor(nuts_temp)))+
   ylab('Nutrient × temperature environment')+
   xlab(bquote("Biovolume" ~(µm^3)))+
   theme(legend.position = "none")
+
+
+ggplot(biovolumes_with_broken, aes(x = biov, y = nuts_temp))+
+  geom_density_ridges()+
+  #scale_x_log10()+
+  #ylab('Diatom strain identity')+
+  xlab(bquote("Biovolume" ~(µm^3)))+
+  #theme(legend.position = "none")+
+  facet_wrap(species_richness~strains)+
+  ggtitle('trying to show how nutsxtemp has different effects on size for different
+          diversity levels but maybe not possible this way....')
 
 
 ```
@@ -369,36 +523,6 @@ ggplot(highdiv_biov, aes(as.factor(temp), biov,  fill=nuts))+
 
 
 
-
-```{r}
-
-size_by_well <- biovolumes_with_broken %>% 
-  group_by(plate, well, species_richness, strains,
-           temp, nuts, nuts_temp) %>%
-  summarize(var_biov=var(biov),
-            mean_biov=mean(biov),
-            CV_biov=sd(biov)/mean(biov)) %>% 
-  mutate(plate=as.character(plate)) %>% 
-  mutate(temp = as.character(temp)) %>% 
-  filter(!is.na(CV_biov))
-
-size_by_well$well<- stri_reverse(size_by_well$well)
-
-#splits <- strsplit(size_by_well$well, "")[[1]]
-#size_by_well$well <-  intToUtf8(rev(utf8ToInt(size_by_well$well)))
-
-#mutate(plate_well = paste(plate, well)) %>% 
-
-size_by_well$nuts_temp <- ordered(size_by_well$nuts_temp, levels = (c("low.8","low.12","low.16","high.8", "high.12", "high.16")))
-
-#allmaxRFUandfits <- read_csv("allmaxRFUandfits17.7.20_withK400allowed.csv")
-
-#sizesandRFU <- left_join(allmaxRFUandfits, size_by_well) %>% 
-#  mutate(totalstrains=species_richness*strains)
-
-```
-
-
 ```{r}
 
 
@@ -428,10 +552,14 @@ B <- ggplot(size_by_well, aes(strains, CV_biov))+
   xlab("Strain richness per species")+
   ylab("Cell size variation (CV)")+
   scale_x_continuous(breaks=c(1,2,3))+
-  scale_y_log10()
+  scale_y_log10()+
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
 B
 
 ggarrange(A,B)
+ggsave("strain_and_sp_rich_vs_CVsize.png")
 
 
 A <- ggplot(size_by_well, aes(species_richness, var_biov))+
@@ -457,6 +585,103 @@ B
 ggarrange(A,B)
 
 
+#### USE THIS - SEEMS BEST APPROACH ####
+
+A <- ggplot(size_by_well, aes(species_richness, CW_variance))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm", color = jevergreen, size = 2)+
+  xlab("Species richness")+
+  ylab("Community-weighted size variance")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()
+A
+
+
+B <- ggplot(size_by_well, aes(strains, CW_variance))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm", color = jevergreen, size = 2)+
+  xlab("Strain richness of each species")+
+  ylab("Community-weighted size variance")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()
+# 
+#   theme(axis.title.y=element_blank(),
+#         axis.text.y=element_blank(),
+#         axis.ticks.y=element_blank())
+B
+
+p <- ggarrange(A,B)
+p
+
+ggsave("richness_vs_CWvariance.png")
+
+
+library(cowplot)
+plot_grid(A, B)
+
+fit <- lm(data= size_by_well, log(CW_variance)~species_richness*strains)
+summary(fit)
+plot(fit)
+avPlots(fit)
+
+####
+
+
+
+
+A <- ggplot(size_by_well, aes(species_richness, CWM_kindof))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Species richness")+
+  ylab("Community-weighted mean size")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()
+A
+
+B <- ggplot(size_by_well, aes(strains, CWM_kindof))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Strain richness of each species")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()+
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+B
+
+p <- ggarrange(A,B)
+annotate_figure(p, "Huh, same trends for CWM as CW variance by sp and strain richness")
+
+A <- ggplot(size_by_well, aes(species_richness, mean_biov))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Species richness")+
+  ylab("mean size just raw abundance weighted")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()
+A
+
+B <- ggplot(size_by_well, aes(strains, mean_biov))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Strain richness of each species")+
+  scale_x_continuous(breaks=c(1,2,3))+
+  scale_y_log10()+
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+B
+
+p <- ggarrange(A,B)
+annotate_figure(p, "but using the raw (abundance-weighed) mean shows totally different trends")
+
+
 ggplot(size_by_well, aes(species_richness, CV_biov))+
   geom_jitter(width = 0.02, alpha = 0.5,aes(color=as.factor(strains)))+
   geom_smooth(size = 1.5, se = FALSE, method = 'lm', aes(color = as.factor(strains)))+
@@ -478,6 +703,11 @@ ggplot(size_by_well, aes(strains, CV_biov))+
   ylab('Cell size variation (CV)')
 
 
+
+
+
+
+
 # 
 # 
 # ggplot(size_by_well, aes(nuts_temp, CV_biov))+
@@ -492,6 +722,7 @@ ggplot(size_by_well, aes(strains, CV_biov))+
 ## size div vs biomass plots
 
 ```{r}
+
 ggplot(full_df, aes(CV_biov, maxRFU))+
   geom_point()+
   #geom_smooth(method="lm")+
@@ -511,6 +742,26 @@ C <- ggplot(full_df, aes(mean_biov, maxRFU))+
   scale_y_log10()
 
 D <- ggplot(full_df, aes(var_biov, maxRFU))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Variance biovolume")+
+  ylab("Biomass (max fluorescence)")+
+  scale_x_log10()+
+  scale_y_log10()
+
+ggarrange(C,D)
+
+C <- ggplot(full_df, aes(CWM_kindof, maxRFU))+
+  geom_point()+
+  #geom_smooth(method="lm")+
+  stat_smooth(method = "lm")+
+  xlab("Mean biovolume")+
+  ylab("Biomass (max fluorescence)")+
+  scale_x_log10()+
+  scale_y_log10()
+
+D <- ggplot(full_df, aes(CW_variance, maxRFU))+
   geom_point()+
   #geom_smooth(method="lm")+
   stat_smooth(method = "lm")+
@@ -547,6 +798,33 @@ summary(fit3)
 avPlots(fit3)
 
 
+# just a reminder that I really shouldn't use nuts unless I measure a lot more cells there to balance things out....
+size_by_well %>%
+  group_by (nuts, temp, species_richness, strains) %>%
+  summarize (n=length(pi_check)) %>% print(n = Inf)
+
+###USE THIS FOR I THINK (UNLESS A MIXED EFFECT MODEL ACTUALLY WORKS AND/OR low nuts data grows)####
+fit_CWvariance <- lm(data = filter(size_by_well, nuts=="high"), 
+                                   log(CW_variance)~species_richness*strains + temp)
+summary(fit_CWvariance)
+avPlots(fit_CWvariance)
+vif(fit_CWvariance)
+plot(fit_CWvariance)
+
+####
+
+
+
+fit_CWvariance2 <- lm(data=size_by_well, log(CW_variance)~species_richness*strains)
+summary(fit_CWvariance2)
+avPlots(fit_CWvariance2)
+vif(fit_CWvariance2)
+plot(fit_CWvariance2)
+
+
+# I don't understand why this is singular if I include intxn but works if additive...
+fit_CWvariance_randomenvt <- lmer(data=filter(size_by_well, nuts=='high'), log(CW_variance)~species_richness + strains + (1|temp))
+summary(fit_CWvariance_randomenvt)
 
 # or at least try something along these lines with lme4...
 
@@ -554,7 +832,7 @@ avPlots(fit3)
 #summary(fit3)
 
 
-AIC(fit1, fit2, fit2.1, fit3)
+AIC(fit1, fit2, fit2.1, fit3, fit_CWvariance, fit_CWvariance2, fit_CWvariance_randomenvt)
 
 ```
 
@@ -635,6 +913,7 @@ ggplot(biovolumes_with_broken, aes(AR))+
   scale_x_log10()
 ```
 
+## biov vs AR for monos
 
 ```{r}
 mono_biov %>% 
@@ -646,10 +925,16 @@ mono_biov %>%
 
 mono_biov %>% 
   filter(!is.na(biov), !is.na(AR), is.na(broken)) %>% 
-  ggplot(aes(biov, AR, color=div_tx))+
-  geom_point(size=2)+
+  ggplot(aes(biov, AR, shape = species_full, color=fct_rev(fullname)))+
+  #scale_x_discrete(limits = rev)+
+  geom_point(size=2.4)+
   scale_x_log10()+
-  scale_y_log10()
+  scale_y_log10()+
+  ylab('Aspect ratio')+
+  xlab(bquote("Biovolume" ~(µm^3)))+
+  scale_color_discrete(name = "Strain identity")+
+  scale_shape_discrete((name = "Species"))
+ggsave("biov_x_AR.monos.png")
 
 ```
 
