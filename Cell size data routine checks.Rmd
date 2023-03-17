@@ -74,6 +74,10 @@ sizechecks <- sizechecks %>%
 summary(sizechecks)
 str(sizechecks)
 
+sizechecks %>% 
+  group_by(plate, well, species) %>% 
+  summarize(count = n())
+
 ```
 
 >Checking that the dimensions make sense for each species. On second thought though I think this would be best to check in excel to make sure I change errors to the right dimension (like would 'l' for dity really be h or w?)
@@ -362,7 +366,9 @@ mono_biov <- mono_biov %>%
 
 
 fig1a <- ggplot(mono_biov, aes(x = biov, y = fullname))+
-  geom_density_ridges(aes(fill=species_full), size = 1.2)+
+  geom_density_ridges(aes(fill=species_full), 
+                      #size = 1.2,
+                      size = 0.8)+
   scale_x_log10()+
   ylab('Diatom strain identity')+
   xlab(bquote("Cell volume" ~(µm^3)))+
@@ -373,6 +379,7 @@ fig1a <- ggplot(mono_biov, aes(x = biov, y = fullname))+
   axis.text.x = element_text(size = 12),
   axis.text.y = element_text(size = 12))
 fig1a
+ggsave("density_plots.png",  width = 150, height = 100, units = "mm", scale = 1, dpi = 600, device = "png")
 
 fig1b <- ggplot(mono_biov, aes(x = AR, y = fullname))+
   geom_density_ridges(aes(fill=species_full), size = 1.2, scale = 1)+
