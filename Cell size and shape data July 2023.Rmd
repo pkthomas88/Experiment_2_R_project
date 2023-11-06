@@ -29,7 +29,7 @@ library(scales)
 #   axis.title.x = element_text(size = 20),
 #   axis.title.y = element_text(size = 20)))
 
-theme_set(theme_bw()+
+theme_set(theme_classic()+
             theme(axis.text=element_text(size=6),
   axis.title.x = element_text(size = 8),
   axis.title.y = element_text(size = 8),
@@ -46,6 +46,7 @@ theme_set(theme_bw()+
 
 
 select <- dplyr::select
+filter <- dplyr::filter
 
 jevergreen <- "#218D3A"
 
@@ -66,9 +67,10 @@ marrit_cells <- read_excel("Experiment 2 cell sizes 01.04.21_MJ.xlsx",
 summary(marrit_cells)
 
 
-svenja_cells <- read_excel("Experiment 2 cell sizes 20.03.21_SW_final.xlsx", 
+svenja_cells <- read_excel("Experiment 2 cell sizes 20.03.21_SW_final_PTfixesNov2023.xlsx", 
     sheet = "all cell measurements") %>% 
   filter(entrant=='SW') %>% 
+  #filter(is.na(exclude)) %>% #WHY DOESN'T IT FUCKING EXCLUDE THINGS????????
   dplyr::select(plate:note2)
 summary(svenja_cells)
 
@@ -78,6 +80,7 @@ summary(sizechecks)
 
 # summary reveals a min value of 0 for distance- looks like there is just one mistake here that should be removed
 sizechecks %>% filter(distance<1) %>% print(n = Inf)
+sizechecks <- sizechecks %>% filter(distance>1)
 
 #sizechecks <- read_excel("C:/Users/pktho/OneDrive/Experiment 2 ALL SYSTEMATIC PHOTOS/Experiment 2 cell sizes 14.01.21_PTchanges.xlsx", 
 #    sheet = "all cell measurements")
@@ -89,6 +92,13 @@ sizechecks <- sizechecks %>%
   select(-angle) %>% 
   mutate(species=ifelse(species=="thalasso", "tnema", species))
   #because it thinks commas are thousands and not decimal point but careful with this!!
+
+summary(sizechecks)
+str(sizechecks)
+
+PT2023cells <- read_excel("Experiment 2 cell sizes Nov2023_PT.xlsx")
+str(PT2023cells)
+sizechecks <- bind_rows(sizechecks, PT2023cells)
 
 
 summary(sizechecks)
@@ -143,8 +153,34 @@ ggplot(grouped, aes(strains, count))+
 
 #checks which wells have been done already
 
-grouped2 <- sizechecks %>% group_by(plate, well, species_richness, strains, nuts, temp) %>% 
-  summarize(count=n())
+grouped2 <- sizechecks %>% group_by(plate, well, species_richness, strains, nuts, temp, div_tx) %>% 
+  summarize(count=n())%>% 
+  filter(!is.na(plate))
+
+plate_well_list <- read_csv("Expt2.2RFU_CSV.csv", na="?????") %>% 
+  #select(plate, well) %>% 
+  distinct(plate, well, species, strains, nuts, temp, div_tx) %>% 
+  filter(!is.na(plate)) %>% 
+  rename(species_richness = species)
+
+grouped2$well<- stri_reverse(grouped2$well)
+
+grouped2 <- full_join(plate_well_list, grouped2)
+write_csv(grouped2, "measurements_by_well.csv")
+
+grouped2 %>% 
+  filter(nuts == 'high') %>% 
+  mutate(count = ifelse(is.na(count), 0, count)) %>% 
+  ggplot(aes(div_tx, count))+
+  geom_bar(stat = 'identity')+
+  coord_flip()
+
+grouped2 %>% 
+  filter(nuts=='high') %>% 
+  group_by(species_richness, strains, nuts, temp) %>% 
+  summarize(nacount = sum(is.na(count))) %>% 
+  print(n = Inf)
+
 ```
 
 Check where the problems are so pivot_wider doesn't drive me crazy
@@ -153,7 +189,7 @@ Check where the problems are so pivot_wider doesn't drive me crazy
 #makes an object of all the cell_ids that appear too many times
 
 cell_id_checks <- sizechecks %>% 
-  count(cell_id) %>% 
+  count(cell_id, entrant) %>% 
   filter(n>2)
 
 FIX <- nrow(cell_id_checks)
@@ -300,10 +336,21 @@ biovolumes_with_broken <- biovolumes_with_broken %>%
 #   mutate(xi_pi_biov = biov*pi_biov) %>%  # weight each cell by its proportion of the assessed biovolume
 #   mutate(CWM_kindof = sum(xi_pi_biov),
 #          CW_distance = pi_biov*(biov-CWM_kindof)^2)
+```
 
+## check total numbers of measurements and by well
 
+```{r}
 summary(biovolumes_with_broken)
-dim(biovolumes_with_broken)
+dim(biovolumes_with_broken) #41967ish measurements
+
+
+counts_per_well <- biovolumes_with_broken %>% 
+  #filter(nuts=="high") %>% 
+  count(plate, well)
+
+mean(counts_per_well$n)
+sd(counts_per_well$n)
 
 ```
 
@@ -353,19 +400,22 @@ size_by_well$well<- stri_reverse(size_by_well$well)
 write_csv(size_by_well, file = "size_by_well.csv")
 
 
+size_by_well %>% count(nuts, temp, species_richness, strains) %>% 
+  print(n = Inf)
+
 # check how the biovolume weighted mean and variance look compared to the raw (abundance-weighted) moments
 
-ggplot(size_by_well, aes(log(mean_biov), log(CWM_kindof)))+
-  geom_point()
-
-
-ggplot(size_by_well, aes(log(var_biov), log(CW_variance)))+
-  geom_point()
-
-ggplot(size_by_well, aes(var_biov, CW_variance))+
-  geom_point()+
-  scale_x_log10()+
-  scale_y_log10()
+# ggplot(size_by_well, aes(log(mean_biov), log(CWM_kindof)))+
+#   geom_point()
+# 
+# 
+# ggplot(size_by_well, aes(log(var_biov), log(CW_variance)))+
+#   geom_point()
+# 
+# ggplot(size_by_well, aes(var_biov, CW_variance))+
+#   geom_point()+
+#   scale_x_log10()+
+#   scale_y_log10()
 
 
 #splits <- strsplit(size_by_well$well, "")[[1]]
@@ -384,7 +434,7 @@ size_by_well$nuts_temp <- ordered(size_by_well$nuts_temp, levels = (c("low.8","l
 
 
 ```{r}
-size_by_well %>% count(species, strains, temp) %>% print(n = Inf)
+size_by_well %>% count(species_richness, strains, temp) %>% print(n = Inf)
 ```
 
 # Effects of environment on cell sizes and shapes
@@ -395,7 +445,50 @@ mono_biov$nuts_temp <- ordered(mono_biov$nuts_temp, levels = (c("low.8","low.12"
                                                             "high.8", "high.12", "high.16")))
 highdiv_biov$nuts_temp <- ordered(highdiv_biov$nuts_temp, levels = (c("low.8","low.12","low.16",
                                                             "high.8", "high.12", "high.16")))
+
+
+mono_biov <- mono_biov %>% 
+  mutate(nuts_temp_fancy = "NA") %>% 
+  mutate(nuts_temp_fancy = ifelse(nuts_temp=="low.8", "Low nutrients, 8°C", nuts_temp_fancy)) %>% 
+  mutate(nuts_temp_fancy = ifelse(nuts_temp=="low.12", "Low nutrients, 12°C", nuts_temp_fancy)) %>% 
+  mutate(nuts_temp_fancy = ifelse(nuts_temp=="low.16", "Low nutrients, 16°C", nuts_temp_fancy)) %>% 
+  mutate(nuts_temp_fancy = ifelse(nuts_temp=="high.8", "High nutrients, 8°C", nuts_temp_fancy)) %>% 
+  mutate(nuts_temp_fancy = ifelse(nuts_temp=="high.12", "High nutrients, 12°C", nuts_temp_fancy)) %>% 
+  mutate(nuts_temp_fancy = ifelse(nuts_temp=="high.16", "High nutrients, 16°C", nuts_temp_fancy))
+
+mono_biov$nuts_temp_fancy <- ordered(mono_biov$nuts_temp_fancy, levels = c("Low nutrients, 8°C", "Low nutrients, 12°C", "Low nutrients, 16°C", "High nutrients, 8°C", "High nutrients, 12°C", "High nutrients, 16°C"))
+
 ```
+
+
+## Summary CV values per species and strain
+
+```{r}
+# Mean, SD, and CV for all species when grown in monoculture (i.e., across strains)
+mono_biov %>% 
+  filter(!is.na(biov)) %>% 
+  group_by(species_full) %>% 
+  summarize(mean = mean(biov),
+            sd = sd(biov),
+            CV = sd/mean)
+
+# Mean, SD, and CV for each strain when grown in monoculture
+mono_biov %>% 
+  filter(!is.na(biov)) %>% 
+  group_by(div_tx) %>% 
+  summarize(mean = mean(biov),
+            sd = sd(biov),
+            CV = sd/mean)
+
+```
+
+```{r}
+mono_biov %>% 
+  distinct(nuts_temp)
+
+
+```
+
 
 # >> nice fig1 option <<
 
@@ -412,6 +505,7 @@ fig1a <- mono_biov %>%
   filter(cell_broken=="n") %>% 
   ggplot(aes(x = biov, y = fullname))+
   geom_density_ridges(aes(fill=species_full), 
+                      scale = 0.95,
                       #size = 1.2,
                       size = 0.6)+
   scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
@@ -423,13 +517,15 @@ fig1a <- mono_biov %>%
   #scale_fill_manual(values = palette_9color)+
   theme(legend.position = "none")
 fig1a
-ggsave("density_plots.png",  width = 150, height = 100, units = "mm", scale = 1, dpi = 600, device = "png")
+
+#ggsave("density_plots.png",  width = 150, height = 100, units = "mm", scale = 1, dpi = 600, device = "png")
 
 fig1b <- mono_biov %>% 
   filter(cell_broken=="n") %>% 
   ggplot(aes(x = AR, y = fullname))+
-  geom_density_ridges(aes(fill=species_full), size = 0.6, scale = 1)+
+  geom_density_ridges(aes(fill=species_full), size = 0.6, scale = 0.95)+
   scale_x_log10()+
+  coord_flip()+
   ylab('Diatom strain identity')+
   xlab("Cell shape (aspect ratio)")+
   #scale_fill_brewer(palette = "Paired")+
@@ -468,20 +564,224 @@ left_side <- plot_grid(fig1a, fig1b, ncol=1, nrow = 2, labels = c('A', 'B'))
 
 plot_grid(left_side, fig1c, labels = c('', 'C'), rel_widths = c(1, 1.5))
 
-ggsave("July2023figs/fig1_sizesxshapes.png",  width = 180, height = 120, units = "mm", scale = 1, dpi = 600, device = "png")
+# ggsave("Oct2023figs/fig1.png",  width = 180, height = 120, units = "mm", scale = 1, dpi = 600, device = "png")
+
+
+
+ggarrange(fig1a, NULL, fig1c, fig1b, 
+          ncol = 2, nrow = 2,  align = "hv", 
+          widths = c(2, 1), heights = c(1, 2),
+          common.legend = TRUE)
+
 
 
 # another option to shift things around
-left_side2 <- plot_grid(fig1a, fig1b, ncol=2, nrow = 1, labels = c('A', 'B'))
-
-plot_grid(left_side2, fig1c, ncol = 1, nrow = 2, labels = c('', 'C'), rel_heights  = c(0.5, 1))
-
-ggsave("July2023figs/fig1_sizesxshapes_v2.png",  width = 180, height = 180, units = "mm", scale = 1, dpi = 600, device = "png")
+# left_side2 <- plot_grid(fig1a, fig1b, ncol=2, nrow = 1, labels = c('A', 'B'))
+# 
+# plot_grid(left_side2, fig1c, ncol = 1, nrow = 2, labels = c('', 'C'), rel_heights  = c(0.5, 1))
+# 
+# ggsave("July2023figs/fig1_sizesxshapes_v2.png",  width = 180, height = 180, units = "mm", scale = 1, dpi = 600, device = "png")
 
 ```
 
 
+# Fig 1 Esteban's version
+
 ```{r}
+
+brewer.pal(n = 8, name = "Dark2")
+display.brewer.pal(n = 8, name = 'Dark2')
+pal1 <- c("#1B9E77", "#D95F02", "#7570B3")
+
+mono_biov <- mono_biov %>% 
+  mutate(origin = "NA") %>% 
+  mutate(origin = ifelse(grepl("Borkum", fullname),"Borkum", origin)) %>% 
+  mutate(origin = ifelse(grepl("Helgoland", fullname), "Helgoland", origin)) %>% 
+  mutate(origin = ifelse(grepl("Kiel", fullname), "Kiel", origin))
+
+
+fig1a <- mono_biov %>% 
+  filter(cell_broken=="n") %>% 
+  ggplot(aes(x = biov, y = fullname))+
+  geom_density_ridges(aes(fill=species_full), 
+                      alpha = 0.6,
+                      scale = 0.88,
+                      #size = 1.2,
+                      size = 0.4)+
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+              labels = trans_format("log10", math_format(10^.x))) +
+  ylab('Diatom strain identity')+
+  xlab(bquote("Cell volume" ~(µm^3)))+
+  scale_fill_brewer(palette = "Dark2")+
+  #scale_fill_manual(values = jever_3color)+
+  #scale_fill_manual(values = palette_9color)+
+  theme(legend.position = "none",
+        axis.text.y = element_text(color=c("#7570B3", "#7570B3", "#7570B3",
+                                           "#D95F02","#D95F02", "#D95F02",
+                                           "#1B9E77","#1B9E77","#1B9E77")))
+
+fig1a
+
+#ggsave("density_plots.png",  width = 150, height = 100, units = "mm", scale = 1, dpi = 600, device = "png")
+
+fig1b <- mono_biov %>% 
+  filter(cell_broken=="n") %>% 
+  ggplot(aes(x = AR, y = fullname))+
+  geom_density_ridges(aes(fill=species_full), size = 0.4, scale = 0.75, alpha = 0.6)+
+  scale_x_log10()+
+  #coord_flip()+
+  ylab('Diatom strain identity')+
+  xlab("Cell shape (aspect ratio)")+
+  scale_fill_brewer(palette = "Dark2")+
+  #scale_fill_manual(values = jever_3color)+
+  theme(legend.position = "none",
+        # axis.title.y = element_blank(), #use these 3 lines to put a and b on top
+        # axis.text.y = element_blank(),
+        # axis.ticks.y = element_blank()
+        axis.text.y = element_text(color=c("#7570B3", "#7570B3", "#7570B3",
+                                           "#D95F02","#D95F02", "#D95F02",
+                                           "#1B9E77","#1B9E77","#1B9E77")))
+fig1b
+
+fig1c <- mono_biov %>% 
+  filter(cell_broken=="n") %>% 
+  #filter(!is.na(biov), !is.na(AR), is.na(broken)) %>% 
+  mutate(fullname = fct_rev(fullname)) %>% 
+  ggplot(aes(biov, AR, shape = origin, fill=species_full))+
+  #scale_x_discrete(limits = rev)+
+  scale_fill_brewer(palette = "Dark2", name = "Strain identity")+
+  #scale_fill_manual(values = jever_3color, name = "Species")+
+  #scale_fill_manual(values = jever_3color, guide = "none")+
+  geom_point(color = "black", size=1.5, alpha = 0.6)+
+  scale_shape_manual(values = c(21, 22, 24), name = "Strain origin")+
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+              labels = trans_format("log10", math_format(10^.x))) +
+  scale_y_log10()+
+  guides(fill = "none")+
+  #theme(legend.position = "top")+
+  theme(legend.position = c(0.15, 0.88),
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 10)
+        #legend.key = element_blank()
+        )+
+  ylab("Cell shape (aspect ratio)")+
+  xlab(bquote("Cell volume" ~(µm^3)))#
+fig1c
+  
+
+left_side <- plot_grid(fig1a, fig1b, ncol=1, nrow = 2, labels = c('A', 'B'))
+
+plot_grid(left_side, fig1c, labels = c('', 'C'), rel_widths = c(1, 1.5))
+
+ggsave("Oct2023figs/fig1_Estebansversion.png",  width = 180, height = 120, units = "mm", scale = 1, dpi = 600, device = "png")
+
+
+
+# ggarrange(fig1a, NULL, fig1c, fig1b, 
+#           ncol = 2, nrow = 2,  align = "hv", 
+#           widths = c(2, 1), heights = c(1, 2),
+#           common.legend = TRUE)
+
+
+
+# another option to shift things around
+# left_side2 <- plot_grid(fig1a, fig1b, ncol=2, nrow = 1, labels = c('A', 'B'))
+# 
+# plot_grid(left_side2, fig1c, ncol = 1, nrow = 2, labels = c('', 'C'), rel_heights  = c(0.5, 1))
+# 
+# ggsave("July2023figs/fig1_sizesxshapes_v2.png",  width = 180, height = 180, units = "mm", scale = 1, dpi = 600, device = "png")
+
+```
+
+## CV data for Fig 1 caption
+
+```{r}
+mono_biov %>% 
+  group_by(species) %>% 
+  summarize(mean_biov = mean(biov, na.rm = TRUE),
+            mean_AR = mean(AR, na.rm = TRUE),
+            sd_biov = sd(biov, na.rm = TRUE),
+            sd_AR = sd(AR, na.rm = TRUE),
+            cv_biov = sd_biov/mean_biov,
+            cv_AR = sd_AR/mean_AR)
+
+```
+
+## Supp methods infO: measurements per well, number broken etc
+
+```{r}
+
+measurements_per_well <- biovolumes_with_broken %>% 
+  filter(nuts=="high") %>% 
+  count(plate, well)
+
+mean(measurements_per_well$n)
+
+biovolumes_with_broken %>% 
+  filter(nuts=="high") %>% 
+  count(broken)
+
+12382+27765
+12382/40147
+```
+
+
+# Fig S2 density plots by envt
+
+```{r}
+mono_biov %>%
+  #filter(cell_broken=='n') %>% 
+    filter(!is.na(biov)) %>% 
+  count(div_tx, nuts, temp) %>% print(n = Inf)
+
+
+mono_biov %>% 
+    #filter(cell_broken=="n") %>% 
+ggplot(aes(x = biov, y = as.factor(nuts_temp_fancy)))+
+  geom_density_ridges(aes(fill=species_full),
+                      alpha = 0.6,
+                      scale = 0.8,
+                      size = 0.4)+
+  facet_wrap(~fct_rev(fullname), scales = 'free')+
+  scale_fill_brewer(palette = "Dark2")+
+    scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+              labels = trans_format("log10", math_format(10^.x))) +
+  ylab('Nutrient × temperature environment')+
+  xlab(bquote("Biovolume" ~(µm^3)))+
+  theme(legend.position = "none",
+        strip.text = element_text(size=7))
+
+ggsave('Oct2023figs/FigS2.png',  width = 180, height = 180, units = "mm", scale = 1, dpi = 600, device = "png")
+
+```
+
+
+> too many broken cells for this to make sense including
+
+```{r}
+
+mono_biov %>% 
+    filter(cell_broken=='n') %>% 
+ggplot(aes(x = AR, y = as.factor(nuts_temp_fancy)))+
+  geom_density_ridges(aes(fill=species_full),
+                      alpha = 0.6,
+                      scale = 0.88,
+                      size = 0.4)+
+  facet_wrap(~fct_rev(fullname), scales = 'free')+
+  scale_fill_brewer(palette = "Dark2")+
+    # scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+    #           labels = trans_format("log10", math_format(10^.x))) +
+  ylab('Nutrient × temperature environment')+
+  xlab("Cell shape (aspect ratio)")+
+  theme(legend.position = "none")
+#ggsave('Oct2023figs/FigS3.png')
+
+```
+
+
+
+```{r}
+
 ggplot(mono_biov, aes(x = biov, y = fullname))+
   geom_density_ridges(aes(fill=fullname), size = 1.2)+
   scale_x_log10()+

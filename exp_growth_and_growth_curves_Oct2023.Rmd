@@ -1,0 +1,132 @@
+---
+title: "Growth_rates_clean_Oct2023"
+author: "Patrick Thomas"
+date: "2023-10-27"
+output: html_document
+---
+# setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+if (!require('ggplot2')) install.packages('ggplot2')
+library(tidyverse)
+library(growthrates)
+library(ggridges)
+library(broom)
+library(psych)
+
+
+
+theme_set(theme_bw()+
+            theme(axis.text=element_text(size=10),
+  axis.title.x = element_text(size = 12),
+  axis.title.y = element_text(size = 12),
+  strip.background=element_rect(fill="#F1F1F1"),
+  strip.text = element_text(size=12)))
+
+select <- dplyr::select
+
+
+full_df <- read_csv("Expt2.2RFU_CSV.csv", col_types = cols(plate = col_character(), 
+    temp = col_character())) %>% 
+  mutate(RFU = as.numeric(RFU))
+
+full_df <- full_df %>% filter(plate!="NA",RFU!="NA", day>-1)
+summary(full_df)
+names(full_df)
+
+
+```
+
+# easylinear
+
+```{r}
+
+easylinear_fits <- all_easylinear(RFU ~ day|plate + well,
+                                  h = 3,
+                                  data = full_df)
+
+
+easylinear_results <- tibble(results(easylinear_fits)) %>%
+  rename(mumax_easylinear = mumax)
+
+
+#par(mfrow = c(2, 3))
+#par(mar=c(1,2,1,1))
+
+filename <- "growthcurves_easylinear.pdf"
+pdf(filename)
+par(mfrow = c(4, 6))
+par(mar=c(1,2,1,1))
+plot(easylinear_fits, log = "y")
+dev.off()
+
+```
+
+
+# exp
+
+```{r}
+
+p     <- c(y0 = 5, mumax = 0.5)
+lower <- c(y0 = 0, mumax = -5)
+upper <- c(y0 = 20, mumax = 5)
+
+full_df_day0to3 <- dplyr::filter(full_df, day<4)
+
+full_df_exp_fits <- all_growthmodels(
+                   RFU ~ grow_exponential(day, parms) | well + plate,
+                   data = full_df_day0to3,
+                   p = p, lower = lower, upper = upper,
+                   log = "y", ncores=2)
+
+
+filename <- "growthcurves_exp.pdf"
+pdf(filename)
+par(mfrow = c(4, 6))
+par(mar=c(1,2,1,1))
+plot(full_df_exp_fits, log = "y")
+dev.off()
+
+
+# par(mfrow = c(4, 6))
+# par(mar=c(1,2,1,1))
+# plot(full_df_exp_fits)
+# 
+# full_df_exp_results <- results(full_df_exp_fits) %>% 
+#   mutate(model = "exp")%>% 
+#   select(plate, well, mumax, model, r2)%>% 
+#   mutate(plate=as.character(plate))
+
+
+```
+
+
+```{r}
+
+full_df$temp <- ordered(full_df$temp, levels = (c("8", "12", "16")))
+full_df$nuts <- ordered(full_df$nuts, levels = (c("low", "high")))
+
+temp.labs <- c("8°C", "12°C", "16°C")
+names(temp.labs) <- c("8", "12", "16")
+nut.labs <- c("Low nutrients", "High nutrients")
+names(nut.labs) <- c("low", "high")
+
+full_df %>% 
+  mutate(plate_well = paste(plate, well)) %>% 
+  ggplot(aes(day, RFU), alpha = 0.01)+
+  stat_smooth(aes(group = plate_well), geom="line", alpha=0.2) +
+  #geom_smooth(aes(group = plate_well), se = FALSE, color = 'black')+
+  facet_grid(nuts~temp, 
+             scales = 'free',
+             labeller = labeller(temp = temp.labs, nuts = nut.labs)
+             )+
+  scale_y_log10()+
+  labs(x = "Day",
+       y = expression(paste("Community biomass (",italic("in vivo")," fluorescence)")))
+
+ggsave("Oct2023figs/all_growth_curves_6panel.png")
+
+```
+

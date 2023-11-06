@@ -27,7 +27,7 @@ Outline
 if (!require("pacman")) install.packages("pacman")
 
 #this line loads the necessary packages after downloading any not already installed:
-pacman::p_load(tidyverse, nlme, lme4, lmerTest, car, MASS, broom, broom.mixed, ggridges, readxl, ggpubr, mgcv, piecewiseSEM, RColorBrewer, cowplot, scales, grid, lm.beta)
+pacman::p_load(tidyverse, nlme, lme4, lmerTest, car, MASS, broom, broom.mixed, ggridges, readxl, ggpubr, mgcv, piecewiseSEM, RColorBrewer, cowplot, scales, grid, lm.beta, semEff)
 
 #CHECK IF ANY OF THESE WEREN"T USED IN THE END
 # library(tidyverse)
@@ -55,10 +55,11 @@ pacman::p_load(tidyverse, nlme, lme4, lmerTest, car, MASS, broom, broom.mixed, g
 #   strip.background=element_rect(fill="#F1F1F1"),
 #   strip.text = element_text(size=8)))
 
-theme_set(theme_bw()+
+theme_set(theme_classic()+
             theme(axis.text=element_text(size=10),
   axis.title.x = element_text(size = 12),
   axis.title.y = element_text(size = 12),
+  legend.title=element_text(size=8),
   strip.background=element_rect(fill="#F1F1F1"),
   strip.text = element_text(size=12)))
 
@@ -68,6 +69,7 @@ select <- dplyr::select
 jever3color <- c("#E2C171","#218D3A", "#297C8C")
 
 jevergreen <- "#218D3A"
+
 
 # check the session info to know what package versions and what R version are used
 sessionInfo()
@@ -178,7 +180,7 @@ summary(full_df)
 ```
 
 
-```{r eval=FALSE, include=FALSE}
+```{r}
 
 
 # create columns for fully written out names for species ('fullname') and environmental treatments ('nuts_temp_fancy')
@@ -211,6 +213,7 @@ unique(full_df$nuts_temp_fancy)
 ```
 
 ```{r}
+
 
 # make sure that nutrients and temperature are coded as factors 
 full_df$temp <- as.factor(full_df$temp)
@@ -292,6 +295,8 @@ unique(full_df$nuts_temp_fancy)
 
 # Figure 2: maximum biomass for all treatments
 
+thanks to this, finally figured out the legend: https://stackoverflow.com/questions/32649426/ggplot-combining-size-and-color-in-legend
+
 ```{r}
 full_df %>% 
   #filter(nuts!='low') %>% 
@@ -301,26 +306,65 @@ full_df %>%
   #geom_point(shape = 22, aes(size = sd(maxRFU)))+
   #geom_jitter(shape=21, alpha=.5, width = 0.3, height = 0.3)+
   facet_wrap(~nuts_temp_fancy)+
-  xlab("Species richness")+
-  scale_size_continuous(range=c(1,6))+
-  labs(fill = expression(paste("Community biomass (maximum ",italic("in vivo")," fluorescence)")))+
+  scale_size_continuous(range=c(1, 6),
+                              name = expression(paste("Community biomass (maximum ",italic("in vivo")," fluorescence)")),
+                        #guide = "legend",
+                        breaks = c(25, 50, 100, 200, 350))+
   geom_vline(xintercept = 1.5, lty = "dashed")+
   geom_vline(xintercept = 2.5, lty = "dashed")+
   geom_hline(yintercept = 1.5, lty = "dashed")+
   geom_hline(yintercept = 2.5, lty = "dashed")+
-  guides(size = "none")+
-  theme(legend.position = "top", legend.text = element_text(size=12),
+  #guides(fill = "none")+
+  guides(fill= guide_legend(), size=guide_legend())+
+  theme_bw()+
+  theme(legend.position = "top", 
+        legend.text = element_text(size=12),
         strip.background=element_rect(fill="#F1F1F1"),
-        panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())+
   #scale_fill_viridis_c(option = "B")+ #try A, B, C, D, they're all cool though
   #scale_fill_distiller(palette = "Spectral")+
   #scale_fill_distiller(palette = "PRGn", direction=1)+ #these are also all cool and color-blind friendly
-  scale_fill_distiller(palette = "Greens", direction=1)+
-  #scale_fill_distiller(palette = "BuGn", direction=1)+
-  #scale_fill_gradient2(low = "#D1AC65", high =  "#116D2B", midpoint = 75)+
-  ylab('Strain richness')
+  scale_fill_distiller(palette = "Greens", direction=1,
+                       name = expression(paste("Community biomass (maximum ",italic("in vivo")," fluorescence)")),
+                        breaks = c(25, 50, 100, 200, 350))+
+    labs(
+       x = "Species richness",
+       y = "Strain richness")
 
-ggsave("July2023figs/fig2.jpg", width = 180, height = 180, units = "mm", scale = 1, dpi = 300, device = "jpg")
+ggsave("Oct2023figs/fig2.jpg", width = 180, height = 180, units = "mm", scale = 1, dpi = 300, device = "jpg")
+
+```
+
+changing legend nvm thats up there^
+
+```{r}
+
+# full_df %>% 
+#   ggplot(aes(as.factor(species), as.factor(strains), fill = maxRFU, size = maxRFU))+
+#   geom_jitter(shape=21, alpha=.5, width = 0.4, height = 0.4)+
+#   facet_wrap(~nuts_temp_fancy)+
+#   xlab("Species richness")+
+#   scale_size_continuous(range=c(1.5,6))+
+#   labs(size = expression(paste("Community biomass (maximum ",italic("in vivo")," fluorescence)")))+
+#   guides(fill = "none")+
+#   geom_vline(xintercept = 1.5, lty = "dashed")+
+#   geom_vline(xintercept = 2.5, lty = "dashed")+
+#   geom_hline(yintercept = 1.5, lty = "dashed")+
+#   geom_hline(yintercept = 2.5, lty = "dashed")+
+#   theme(legend.position = "top", legend.text = element_text(size=12),
+#         strip.background=element_rect(fill="#F1F1F1"),
+#         panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+#   scale_fill_distiller(palette = "Greens", 
+#                        direction=1, 
+#                        #breaks = c(20, 50, 100, 200, 300),
+#                        guide = "legend")+
+#   ylab('Strain richness')
+# 
+# 
+# full_df %>% 
+#   group_by(nuts, temp) %>% 
+#   summarize(meanmax = mean(maxRFU))
 
 ```
 
@@ -392,12 +436,11 @@ full_df %>%
 
 ```
 
-# Fig SX growth rates
+# Fig 3 (I think) growth rates
 
 > or maybe this could be fig 3, but does anyone care about growth rates? If so I need to add a hypothesis about that...at least this can work for the whole dataset unlike the size stuff
 
 ```{r}
-
 full_df %>% 
   #filter(nuts!='low') %>% 
   ggplot(aes(as.factor(species), as.factor(strains), size = mumax_exp, fill = mumax_exp))+
@@ -407,10 +450,11 @@ full_df %>%
   #geom_point(shape = 22, aes(size = maxRFU))+
   #geom_point(shape = 22, aes(size = sd(maxRFU)))+
   #geom_jitter(shape=21, alpha=.5, width = 0.3, height = 0.3)+
-  facet_wrap(~nuts_temp)+
+  facet_wrap(~nuts_temp_fancy)+
   xlab("Species richness")+
   scale_size_continuous(range=c(1,6))+
-  labs(fill = "Growth rate (day-1)")+
+  labs(fill = expression(paste("Growth rate (",day^-1, ")")))+
+  #labs(fill=bquote("Growth rate ("~day^-1))+
   geom_vline(xintercept = 1.5, lty = "dashed")+
   geom_vline(xintercept = 2.5, lty = "dashed")+
   geom_hline(yintercept = 1.5, lty = "dashed")+
@@ -427,11 +471,20 @@ full_df %>%
   #scale_fill_gradient2(low = "#D1AC65", high =  "#116D2B", midpoint = 75)+
   ylab('Strain richness')
 
-ggsave("march2023figs/FigSX_growth_rates.jpg", width = 180, height = 130, units = "mm", scale = 1, dpi = 300, device = "jpg")
+ggsave("Oct2023figs/fig3.jpg", width = 180, height = 180, units = "mm", scale = 1, dpi = 300, device = "jpg")
+```
 
+> summary of growth rate across treatments
 
+```{r}
 full_df %>% 
   group_by(species, strains, nuts_temp_fancy) %>% 
+  summarize(mean(mumax_exp)) %>% 
+  arrange(nuts_temp_fancy) %>% 
+  print(n=Inf)
+
+full_df %>% 
+  group_by(nuts_temp_fancy) %>% 
   summarize(mean(mumax_exp)) %>% 
   arrange(nuts_temp_fancy) %>% 
   print(n=Inf)
@@ -468,7 +521,7 @@ ggsave("march2023figs/fig2option2.jpg", width = 180, height = 130, units = "mm",
 
 
 
-# Fig 3 (6 panel version)
+## Fig Sx? or remove (6 panel version of raw biomass data etc)
  -->also, does it make more sense to show partial correltions as in Grace et al Nature 2016? (I spent a day trying this and gave up, so meh...)
 
 ```{r}
@@ -617,7 +670,7 @@ fig3 <- plot_grid(AB,
                   nrow = 3, hjust = TRUE, vjust = TRUE)
 fig3
 
-ggsave("July2023figs/fig3.jpg", width = 180, height = 180, scale = 1, units = "mm", dpi = 600, device = "jpeg")
+ggsave("Oct2023figs/junkbivariaterawdatafig.jpg", width = 180, height = 180, scale = 1, units = "mm", dpi = 600, device = "jpeg")
 
 ```
 
@@ -678,11 +731,7 @@ full_df %>% ggplot(aes(log(mumax_exp)))+
 
 ```
 
-
-# Linear model allowing for all interactions
 ```{r}
-
-
 # without log transforming maxRFU - don't use this....
 # mod_full <- lm(data = full_df, maxRFU ~ species*strains*nuts*temp)
 # summary(mod_full)
@@ -696,32 +745,70 @@ full_df %>% ggplot(aes(log(mumax_exp)))+
 
 
 # seeing what happens what temp and nuts are numeric
-# full_df2 <- full_df %>% mutate(nuts = as.numeric(nuts), temp = as.numeric(temp))
-# 
-# full_df2 %>% ungroup() %>% distinct(temp, nuts)
+
+
+# make separate dataframe for when it is better to treat nuts and temp as numeric instead of factors
+full_df_numeric <- full_df %>% 
+  mutate(temp = as.numeric(temp),
+         nuts = as.numeric(nuts)) %>% 
+  mutate(nuts = ifelse(nuts==2, 4, nuts)) %>% 
+  mutate(temp = ifelse(temp==1, 8, temp)) %>% 
+  mutate(temp = ifelse(temp==2, 12, temp)) %>% 
+  mutate(temp = ifelse(temp ==3, 16, temp))
+
+full_df_numeric %>% 
+  summary()
+
+full_df_numeric %>% 
+  ungroup() %>% 
+  distinct(nuts, temp, nuts_temp_fancy)
+```
 
 
 
-## Should use this one! 
+# Table S2, S4 - Linear models allowing for all interactions
+
+```{r}
+
+## Should use this one! (or one of these)
+# read this about ordered stuff https://library.virginia.edu/data/articles/understanding-ordered-factors-in-a-linear-model
+
+full_df_unordered <- full_df
+full_df_unordered$nuts <- factor(full_df_unordered$nuts, ordered = FALSE)
+full_df_unordered$temp <- factor(full_df_unordered$temp, ordered = FALSE)
+
 
 mod_full <- lm(data = full_df, logmaxRFU ~ species*strains*nuts*temp)
+mod_full_unordered <- lm(data = full_df_unordered, logmaxRFU ~ species*strains*nuts*temp)
+mod_full_numeric <- lm(data = full_df_numeric, logmaxRFU ~ species*strains*nuts*temp)
+
+#not sure if any one is more appropriate than the others, but I guess 
+#the original one leaving nuts and temp makes most sense still
+
+AIC(mod_full, mod_full_unordered, mod_full_numeric)
+
 summary(mod_full)
+summary(mod_full_unordered)
+summary(mod_full_numeric)
+
 lm.beta(mod_full)
 lmbeta.mod_full <- lm.beta(mod_full)
 print(lmbeta.mod_full)
 summary(lmbeta.mod_full)
 modfullcoefs <- coef(lmbeta.mod_full)
 modfullcoefs <- tidy(lmbeta.mod_full, conf.int = TRUE) %>% 
-  mutate(sign = ifelse(p.value<0.05, "*", "n.s."))
-write_csv(modfullcoefs, "July2023figs/modfullcoefs.csv")
+  mutate(`signif.` = ifelse(p.value<0.05, "*", "n.s.")) %>% 
+ mutate_if(is.numeric, round, 3)
+write_csv(modfullcoefs, "Oct2023figs/TableS2_4wayintxn.csv")%>% 
+  select(-std.error)
 
 
 plot(mod_full) # this actually doesn't look awesome
 vif(mod_full)
 stepAIC(mod_full)
-mod_biomass <- tidy(mod_full, conf.int = TRUE) %>% 
-  mutate(sign = ifelse(p.value<0.05, "*", "n.s."))
-write_csv(mod_biomass, "mod_full_biomass.csv")
+# mod_biomass <- tidy(mod_full, conf.int = TRUE) %>% 
+#   mutate(sign = ifelse(p.value<0.05, "*", "n.s."))
+# write_csv(mod_biomass, "mod_full_biomass.csv")
 
 avPlots(mod_full)
 plot(allEffects(mod_full))
@@ -736,13 +823,16 @@ lm.beta(mod_full_additive) #standardized coefficients
 
 mod_full_gr <- lm(data = full_df, mumax_exp ~ species*strains*nuts*temp)
 summary(mod_full_gr)
-lm.beta(mod_full_gr)
-plot(mod_full_gr)
-vif(mod_full_gr)
-stepAIC(mod_full_gr)
+# plot(mod_full_gr)
+# vif(mod_full_gr)
+# stepAIC(mod_full_gr)
+
+mod_full_gr <- lm.beta(mod_full_gr)
 mod_GR <- tidy(mod_full_gr, conf.int = TRUE) %>% 
-  mutate(sign = ifelse(p.value<0.05, "*", "n.s."))
-write_csv(mod_GR, "July2023figs/mod_gr.csv")
+  mutate(`signif.` = ifelse(p.value<0.05, "*", "n.s.")) %>% 
+  select(-std.error)%>% 
+ mutate_if(is.numeric, round, 3)
+write_csv(mod_GR, "Oct2023figs/TableS4_mod_gr_4way.csv")
 
 mod_full_gr_additive <- lm(data = full_df, mumax_exp ~ species+strains+nuts*temp)
 summary(mod_full_gr_additive)
@@ -755,6 +845,23 @@ lm.beta(mod_full_gr_additive)
 
 mod_full_CV_biov <- lm(data = filter(full_df,nuts=="high"), CV_biov ~ species*strains*temp)
 summary(mod_full_CV_biov)
+
+```
+
+# Table S3 - linear model fits per environment
+
+```{r}
+
+full_df_fits <- full_df %>% 
+  group_by(nuts_temp) %>% 
+  do(model = tidy(lm.beta(lm(logmaxRFU ~ species*strains, data = .)), conf.int = TRUE)) %>% 
+  unnest(model) %>% 
+  mutate(`signif.` = ifelse(p.value<0.05, "*", "n.s."))%>% 
+  select(-std.error)%>% 
+ mutate_if(is.numeric, round, 3) %>% 
+  rename(Environment = nuts_temp)
+
+write_csv(full_df_fits, "Oct2023figs/TableS3_biomass_by_envt.csv")
 
 ```
 
@@ -834,18 +941,21 @@ df_for_sem <- full_df %>%
   
   
   
-df_for_sem %>% ggplot(aes(logvar))+geom_histogram()
-df_for_sem %>% ggplot(aes(var_biov))+geom_histogram()
+df_for_sem %>% ggplot(aes(logvar))+geom_histogram()+
+  scale_x_log10()
+
+df_for_sem %>% ggplot(aes(var_biov))+geom_histogram()+
+  scale_x_log10()
 
 
 str(df_for_sem)
+
 ```
 
 
 # attempt at cleaning up code to only include models that specifically fit clear hypotheses, not trying every possible combination:
 
 ```{r}
-
 #### with growth rate ####
 
 # Fixed effects model including species x strain interaction and temperature and growth rate
@@ -912,8 +1022,12 @@ mod4 <- psem(
 summary(mod4, intercepts = T)
 AIC(mod4)
 plot(mod4)
+```
 
 
+# Fig 4 - made from mod5 coefficients
+
+```{r}
 mod5 <- psem(
   lm(logmaxRFU ~ species*strains + temp + logvar + logmeanbiov, df_for_sem),
   lm(logvar ~ species*strains + temp, df_for_sem),
@@ -927,9 +1041,9 @@ png(file = "July2023figs/mod5plot.png")
 
 mod5coefs <- coefs(mod5, intercepts = T)
 
-tidy(mod5)
+#tidy(mod5)
 
-write_csv(mod5coefs, "July2023figs/mod5coefs.csv")
+write_csv(mod5coefs, "Oct2023figs/Fig4_mod5coefs.csv")
 
 
 # Removing interactions makes it worse btw !!
@@ -940,8 +1054,11 @@ mod5.1 <- psem(
   logmeanbiov %~~% logvar
   )
 AIC(mod5.1)
+```
 
+##Table S5 - SEM with random effects
 
+```{r}
 # same as 5 but with species/strain comp as random effect, though this might cause problems since there is only one sp comp treatment for 3 x 3 sp/strains... would maybe have to filter out full div treatment in this case?
 
 mod6 <- psem(
@@ -956,7 +1073,7 @@ AIC(mod6)
 plot(mod6)
 mod6coefs <- coefs(mod6, intercepts = T)
 
-write_csv(mod6coefs, "July2023figs/mod6coefs.csv")
+write_csv(mod6coefs, "Oct2023figs/TableS5_mod6coefs.csv")
 
 # residmod6_nospecies <- resid(psem(
 #   lme(logmaxRFU ~ strains + temp + logvar + logmeanbiov, random = ~1|div_tx, df_for_sem),
@@ -964,7 +1081,10 @@ write_csv(mod6coefs, "July2023figs/mod6coefs.csv")
 #   lme(logmeanbiov ~ temp, random = ~1|div_tx, df_for_sem),
 #   logmeanbiov %~~% logvar
 #   ))
+```
 
+
+```{r}
 
 df_for_sem2 <- df_for_sem %>% 
   filter(!is.na(mean_AR), !is.na(var_AR))
@@ -987,16 +1107,94 @@ plot(mod7)
 
 mod7coefs <- coefs(mod7, intercepts = T)
 
-write_csv(mod7coefs, "July2023figs/mod7coefs.csv")
+write_csv(mod7coefs, "Oct2023figs/TableS6_mod7coefs.csv")
 
 ```
 
 
-# $$$$ PARTIAL PLOTS
+## Fig 4BC Using semEff to make bar plots
+
+```{r}
+
+# THIS TAKES FOREVER - I SAVED IT SO I DON"T HAVE TO RUN IT AGAIN
+
+# system.time(
+#   mod5.sem.boot <- bootEff(mod5, R = 10000, seed = 12)
+# )
+# 
+# save(mod5.sem.boot, file = "mod5.sem.boot.RData")
+
+load("mod5.sem.boot.RData")
+
+(mod5.sem.eff <- semEff(mod5.sem.boot))
+
+summary(mod5.sem.eff)
+
+semeff.total <- getTotEff(mod5.sem.eff)
+
+```
 
 
 ```{r}
-#### Fig 3A - Partial effects of species richness on biomass
+
+semeff_maxRFU <- data.frame(semeff.total[1]) %>% 
+  rownames_to_column() %>% 
+  filter(rowname!='(Intercept)')
+
+semeff_maxRFU$rowname <- ordered(semeff_maxRFU$rowname, 
+                                 # levels = c("species", "strains", "species:strains", 
+                                 #            "temp", "logmeanbiov", "logvar"),
+                                 levels = c("logvar", "logmeanbiov", "temp", "species:strains",
+                                            "strains", "species"))
+
+semeff_maxRFU %>% 
+  ggplot(aes(x = rowname, y = logmaxRFU))+
+  geom_bar(stat = "identity", color = "gray", alpha = 0.6)+
+  labs(y = "Standardized total effect on biomass", x = "Predictor")+
+    # scale_x_discrete(labels = c('Species richness','Strain richness','Species*Strain richness interaction', "Temperature", "Mean cell size", "Cell size variance"))+
+    scale_x_discrete(labels = c("Cell size variance", "Mean cell size", "Temperature", "Species*strain richness", "Strain richness","Species richness"))+
+  coord_flip()+
+  geom_hline(yintercept = 0)+
+  theme(axis.title.y = element_blank())
+  
+ggsave("Oct2023figs/fig4b_SEMeffects_biomass.png", width = 5, height = 3, units = "in")
+
+
+
+####
+
+semeff_logvar <- data.frame(semeff.total[2]) %>% 
+  rownames_to_column() %>% 
+  filter(rowname!='(Intercept)')
+
+semeff_logvar$rowname <- ordered(semeff_logvar$rowname, 
+                                 # levels = c("species", "strains", "species:strains", 
+                                 #            "temp", "logmeanbiov", "logvar"),
+                                 levels = c("temp", "species:strains",
+                                            "strains", "species"))
+
+semeff_logvar %>% 
+  ggplot(aes(x = rowname, y = logvar))+
+  geom_bar(stat = "identity", color = "gray", alpha = 0.6)+
+  labs(y = "Standardized total effect on cell size variance", x = "Predictor")+
+    # scale_x_discrete(labels = c('Species richness','Strain richness','Species*Strain richness interaction', "Temperature", "Mean cell size", "Cell size variance"))+
+    scale_x_discrete(labels = c("Temperature", "Species*strain richness", "Strain richness","Species richness"))+
+  coord_flip()+
+  geom_hline(yintercept = 0)+
+  theme(axis.title.y = element_blank())
+
+ggsave("Oct2023figs/fig4b_SEMeffects_biov.png", width = 5, height = 3, units = "in")
+ 
+
+```
+
+
+
+# Fig 5 PARTIAL PLOTS
+
+
+```{r}
+#### Fig 4 - Partial effects of species richness on biomass
 
 resid_sp.rfu <- partialResid(logmaxRFU ~ species, mod5)
 
@@ -1008,7 +1206,7 @@ resid_sp.rfu <- bind_cols(resid_sp.rfu, sp_str)
 A <- resid_sp.rfu %>% 
   ggplot(aes(xresid, yresid))+
   geom_point(shape = 21,size = 2, alpha = 0.8, aes(fill = as.factor(strains)))+
-  geom_smooth(method = 'lm', size = 2, se = FALSE, aes(color = as.factor(strains)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, aes(color = as.factor(strains)))+
   #geom_smooth(method = 'lm', se = FALSE, color = "black")+
   guides(color = "none",
          fill = guide_legend(override.aes = list(size=4)))+
@@ -1032,12 +1230,12 @@ partialCorr(logmaxRFU~species, modelList = mod5)
 resid_sp.sizevar <- partialResid(logvar ~ species, mod5)
 partialCorr(logvar ~ species, modelList = mod5)
 
-resid_sp.sizevar <- bind_cols(resid_sp.sizevar, sp_str)
+resid_sp.sizevar.rfu <- bind_cols(resid_sp.sizevar, sp_str)
 
 B <- resid_sp.sizevar.rfu %>% 
   ggplot(aes(xresid, yresid))+
   geom_point(shape = 21,size = 2, alpha = 0.8, aes(fill = as.factor(strains)))+
-  geom_smooth(method = 'lm', size = 2, se = FALSE, aes(color = as.factor(strains)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, aes(color = as.factor(strains)))+
   #geom_smooth(method = 'lm', se = FALSE, color = "black")+
   guides(color = "none")+
   scale_color_brewer(palette = "Dark2")+
@@ -1052,7 +1250,7 @@ B <- resid_sp.sizevar.rfu %>%
 
 B
 
-AB <- ggarrange(A, B, labels = c("A", "B"), common.legend = TRUE, ncol = 2, nrow = 1, align = "hv", label.y = 1.05)
+AB <- ggarrange(A, B, labels = c("A", "B"), common.legend = FALSE, ncol = 2, nrow = 1, align = "hv", label.y = 1.05)
 #AB <- annotate_figure(AB, bottom = textGrob("Species richness"))
 AB
 
@@ -1066,12 +1264,12 @@ resid_str.rfu <- bind_cols(resid_str.rfu, sp_str)
 C <- resid_str.rfu %>% 
   ggplot(aes(xresid, yresid))+
   geom_point(shape = 21,size = 2, alpha = 0.8, aes(fill = as.factor(species)))+
-  geom_smooth(method = 'lm', size = 2, se = FALSE, aes(color = as.factor(species)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, aes(color = as.factor(species)))+
   #geom_smooth(method = 'lm', se = FALSE, color = "black")+
     guides(color = "none",
          fill = guide_legend(override.aes = list(size=4)))+
-  scale_color_brewer(palette = "Dark2")+
-  scale_fill_brewer(palette = "Dark2")+
+  scale_color_brewer(palette = "Purples")+
+  scale_fill_brewer(palette = "Purples")+
   labs(x = "Strain richness", 
        y = "Biomass",
        fill = "Species richness")+
@@ -1092,12 +1290,12 @@ resid_str.sizevar <- bind_cols(resid_str.sizevar, sp_str)
 D <- resid_str.sizevar %>% 
   ggplot(aes(xresid, yresid))+
   geom_point(shape = 21, size = 2, alpha = 0.8, aes(fill = as.factor(species)))+
-  geom_smooth(method = 'lm', size = 2, se = FALSE, aes(color = as.factor(species)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, aes(color = as.factor(species)))+
   #geom_smooth(method = 'lm', se = FALSE, color = "black")+
   guides(color = "none",
          fill = guide_legend(override.aes = list(size=4)))+
-  scale_color_brewer(palette = "Dark2")+
-  scale_fill_brewer(palette = "Dark2")+
+  scale_color_brewer(palette = "Purples")+
+  scale_fill_brewer(palette = "Purples")+
   labs(x = "Strain richness", 
        y = bquote("Cell size variance"),
        fill = "Species richness")+
@@ -1105,6 +1303,7 @@ D <- resid_str.sizevar %>%
   theme_classic()+
     theme(legend.position = "top")
 D
+
 
 
 CD <- ggarrange(C, D, labels = c("C", "D"), common.legend = TRUE, ncol = 2, nrow = 1, align = "hv", label.y = 1.05)
@@ -1119,9 +1318,9 @@ resid_sizevar.biomass <- bind_cols(resid_sizevar.biomass, sp_str)
 
 E <- resid_sizevar.biomass %>% 
   ggplot(aes(xresid, yresid))+
-  geom_point(shape = 21, size = 2, alpha = 0.4, fill = jevergreen)+
+  geom_point(shape = 21, size = 2, alpha = 0.4, fill = "gray")+
   #geom_smooth(method = 'lm', se = FALSE, aes(color = as.factor(temp)))+
-  geom_smooth(method = 'lm', size = 2, se = FALSE, color = "black")+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, color = "black")+
   guides(color = "none")+
   #scale_color_brewer(palette = "Blues")+
   scale_fill_distiller(palette = "Greens", direction = 1)+
@@ -1143,9 +1342,9 @@ resid_sizemean.biomass <- bind_cols(resid_sizemean.biomass, df_for_sem)
 
 F <- resid_sizemean.biomass %>% 
   ggplot(aes(xresid, yresid))+
-  geom_point(shape = 21, size = 2, alpha = 0.4, fill = jevergreen)+
+  geom_point(shape = 21, size = 2, alpha = 0.4, fill = "gray")+
   #geom_smooth(method = 'lm', se = FALSE, aes(color = as.factor(temp)))+
-  geom_smooth(method = 'lm', size = 2, se = FALSE, color = "black")+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, color = "black")+
   guides(color = "none")+
   #scale_color_brewer(palette = "Blues")+
   #scale_fill_distiller(palette = "Greens", direction = 1)+
@@ -1171,7 +1370,229 @@ ABCDEF
 # 
 # ABCDEF
 
-ggsave("July2023figs/fig3.jpg", width = 150, height = 180, scale = 1, units = "mm", dpi = 600, device = "jpeg")
+ggsave("Oct2023figs/fig5.jpg", width = 150, height = 180, scale = 1, units = "mm", dpi = 600, device = "jpeg")
+
+```
+
+
+
+```{r}
+
+# brewer.pal(n = 8, name = "Dark2")
+# display.brewer.pal(n = 8, name = 'Dark2')
+# pal1 <- c("#1B9E77", "#D95F02", "#7570B3")
+# pal2 <- c("#E7298A", "#66A61E", "#E6AB02")
+
+
+```
+
+
+# Fig 5 Esteban's version
+
+
+```{r}
+#### Fig 4 - Partial effects of species richness on biomass
+
+brewer.pal(n = 8, name = "YlOrBr")
+display.brewer.pal(n = 8, name = 'YlOrBr')
+pal1 <- c("#FEC44F", "#EC7014", "#8C2D04")
+
+brewer.pal(n = 8, name = "YlGnBu")
+display.brewer.pal(n = 8, name = 'YlGnBu')
+pal2 <- c("#7FCDBB", "#1D91C0", "#0C2C84")
+
+
+resid_sp.rfu <- partialResid(logmaxRFU ~ species, mod5)
+
+sp_str <- df_for_sem %>% 
+  select(species, strains, temp, logmaxRFU)
+
+resid_sp.rfu <- bind_cols(resid_sp.rfu, sp_str)
+
+A <- resid_sp.rfu %>% 
+  ggplot(aes(xresid, yresid))+
+  geom_point(shape = 21,size = 2, alpha = 0.8, aes(fill = as.factor(strains)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, aes(color = as.factor(strains)))+
+  #geom_smooth(method = 'lm', se = FALSE, color = "black")+
+  guides(color = "none",
+         fill = guide_legend(override.aes = list(size=3)))+
+  scale_color_manual(values = pal1)+
+  scale_fill_manual(values = pal1)+
+  labs(x = "Species richness", 
+       y = "Biomass",
+       fill = "Strain richness")+
+  theme_classic()+
+    scale_x_continuous(breaks=c(-1,0,1))+
+    theme(legend.position = "top",
+            legend.title=element_text(size=9))
+A
+
+partialCorr(logmaxRFU~species, modelList = mod5)
+
+#### Fig 3B - Partial effects of strain richness on biomass
+
+resid_str.rfu <- partialResid(logmaxRFU ~ strains, mod5)
+
+resid_str.rfu <- bind_cols(resid_str.rfu, sp_str)
+
+B <- resid_str.rfu %>% 
+  ggplot(aes(xresid, yresid))+
+  geom_point(shape = 21,size = 2, alpha = 0.8, aes(fill = as.factor(species)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, aes(color = as.factor(species)))+
+  #geom_smooth(method = 'lm', se = FALSE, color = "black")+
+     guides(color = "none",
+            fill = guide_legend(override.aes = list(size=3)))+
+  scale_color_manual(values = pal2)+
+  scale_fill_manual(values = pal2)+
+  labs(x = "Strain richness", 
+       y = "Biomass",
+       fill = "Species richness")+
+    scale_x_continuous(breaks=c(-1,0,1))+
+  theme_classic()+
+    theme(legend.position = "top",
+          legend.title=element_text(size=9),
+          axis.title.y = element_blank())
+B
+
+partialCorr(logmaxRFU~strains, modelList = mod5)
+
+
+AB <- ggarrange(A, B, labels = c("A", "B"), ncol = 2, nrow = 1, align = "v", label.y = 1)
+#AB <- annotate_figure(AB, bottom = textGrob("Species richness"))
+AB
+
+
+
+#### Fig 3C - Partial effects of species richness on size variance
+
+
+resid_sp.sizevar <- partialResid(logvar ~ species, mod5)
+partialCorr(logvar ~ species, modelList = mod5)
+
+resid_sp.sizevar.rfu <- bind_cols(resid_sp.sizevar, sp_str)
+
+C <- resid_sp.sizevar.rfu %>% 
+  ggplot(aes(xresid, yresid))+
+  geom_point(shape = 21,size = 2, alpha = 0.8, aes(fill = as.factor(strains)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, aes(color = as.factor(strains)))+
+  #geom_smooth(method = 'lm', se = FALSE, color = "black")+
+  guides(color = "none",
+         fill = guide_legend(override.aes = list(size=3)))+
+  scale_color_manual(values = pal1)+
+  scale_fill_manual(values = pal1)+
+  labs(x = "Species richness", 
+       y = bquote("Cell size variance"),
+       fill = "Strain richness")+
+  theme_classic()+
+  #theme(legend.position =c(0.1,0.9))+
+  scale_x_continuous(breaks=c(-1,0,1))+
+    theme(legend.position = "top",
+          legend.title=element_text(size=9))
+
+C
+
+
+
+
+
+#### Fig 3D - Partial effects of strain richness on size variance
+
+resid_str.sizevar <- partialResid(logvar ~ strains, mod5)
+partialCorr(logvar ~ strains, modelList = mod5)
+
+resid_str.sizevar <- bind_cols(resid_str.sizevar, sp_str)
+
+D <- resid_str.sizevar %>% 
+  ggplot(aes(xresid, yresid))+
+  geom_point(shape = 21, size = 2, alpha = 0.8, aes(fill = as.factor(species)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, aes(color = as.factor(species)))+
+  #geom_smooth(method = 'lm', se = FALSE, color = "black")+
+  guides(color = "none",
+         fill = guide_legend(override.aes = list(size=3)))+
+  scale_color_manual(values = pal2)+
+  scale_fill_manual(values = pal2)+
+  labs(x = "Strain richness", 
+       y = bquote("Cell size variance"),
+       fill = "Species richness")+
+    scale_x_continuous(breaks=c(-1,0,1))+
+  theme_classic()+
+    theme(legend.position = "top",
+          legend.title=element_text(size=9),
+          axis.title.y = element_blank())
+D
+
+
+
+CD <- ggarrange(C, D, labels = c("C", "D"), ncol = 2, nrow = 1, align = "hv", label.y = 1)
+#CD <- annotate_figure(CD, bottom = textGrob("Strain richness"))
+CD
+
+
+
+
+resid_sizevar.biomass <- partialResid(logmaxRFU ~ logvar, mod5)
+partialCorr(logmaxRFU ~ logvar, modelList = mod5)
+
+resid_sizevar.biomass <- bind_cols(resid_sizevar.biomass, sp_str)
+
+E <- resid_sizevar.biomass %>% 
+  ggplot(aes(xresid, yresid))+
+  geom_point(shape = 21, size = 2, alpha = 0.6, fill = "gray")+
+  #geom_smooth(method = 'lm', se = FALSE, aes(color = as.factor(temp)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, color = "black")+
+  guides(color = "none")+
+  #scale_color_brewer(palette = "Blues")+
+  #scale_fill_distiller(palette = "Greens", direction = 1)+
+  labs(x = "Cell size variance", 
+       y = "Biomass",
+      fill = "log(biomass)")+
+  theme_classic()+
+  #theme(legend.position =c(0.1,0.9))+
+  theme(legend.position = "top")
+
+E
+
+
+
+resid_sizemean.biomass <- partialResid(logmaxRFU ~ logmeanbiov, mod5)
+partialCorr(logmaxRFU ~ logmeanbiov, modelList = mod5)
+
+resid_sizemean.biomass <- bind_cols(resid_sizemean.biomass, df_for_sem)
+
+F <- resid_sizemean.biomass %>% 
+  ggplot(aes(xresid, yresid))+
+  geom_point(shape = 21, size = 2, alpha = 0.6, fill = "gray")+
+  #geom_smooth(method = 'lm', se = FALSE, aes(color = as.factor(temp)))+
+  geom_smooth(method = 'lm', size = 1.5, se = FALSE, color = "black")+
+  guides(color = "none")+
+  #scale_color_brewer(palette = "Blues")+
+  #scale_fill_distiller(palette = "Greens", direction = 1)+
+  labs(x = "Mean cell size", 
+       y = "Biomass",
+      fill = "log(biomass)")+
+  theme_classic()+
+  #theme(legend.position =c(0.1,0.9))+
+    theme(legend.position = "top",
+          axis.title.y = element_blank())
+
+F
+
+
+EF <- ggarrange(E, F, labels = c("E", "F"), ncol = 2, nrow = 1, align = "hv", label.y = 1)
+EF
+
+ABCDEF <- plot_grid(AB, CD, EF, ncol = 1, nrow = 3, align = c("hv"))
+ABCDEF
+
+ABCDEF <- plot_grid(A, B, C,D, E, F, ncol = 2, nrow = 3, align = c("hv"),
+                    labels = c("A","B","C","D","E", "F"))
+ABCDEF
+
+# ABCDEF <- plot_grid(A, B, C, D, E, F, labels = c("A", "B", "C", "D", "E", "F"), label_size = 10, ncol = 2, nrow = 3)
+# 
+# ABCDEF
+
+ggsave("Oct2023figs/fig5_Estebansversion.jpg", width = 160, height = 180, scale = 1, units = "mm", dpi = 600, device = "jpeg")
 
 ```
 
@@ -1780,20 +2201,6 @@ table1 <- bind_rows(biomass_mod, size_mod)
 write_csv(table1, "table1.csv")
 
 ```
-
-
-```{r}
-
-full_df_fits <- full_df %>% 
-  group_by(nuts_temp) %>% 
-  do(model = tidy(lm(maxRFU ~ species*strains, data = .), conf.int = TRUE)) %>% 
-  unnest(model) %>% 
-  mutate(sig = ifelse(p.value<0.05, "*", "NA"))
-
-write_csv(full_df_fits, "biomass_by_envt.csv")
-
-```
-
 
 
 ```{r}
