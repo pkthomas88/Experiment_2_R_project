@@ -132,6 +132,7 @@ size_by_well <- read_csv("size_by_well.csv") %>%
   rename(species = species_richness)
 
 summary(size_by_well)
+
 ```
 
 DATA CHECKS TO DELETE?
@@ -227,6 +228,14 @@ unique(full_df$nuts_temp_fancy)
 
 
 ```
+
+
+```{r}
+
+
+
+```
+
 
 # Characterizing the extent of trait diversity among and within species
 
